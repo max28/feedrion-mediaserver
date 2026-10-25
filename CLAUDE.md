@@ -1,0 +1,48 @@
+# Feedrion for Jellyfin & Emby — notes for Claude
+
+This repository WILL BE PUBLIC, history included. Write every file, commit
+message and comment as if it already were.
+
+## Never commit
+- Secrets of any kind: tokens, keys, `.env` values, a real refresh token in a
+  test fixture (fixtures use obviously fake strings).
+- Infrastructure details of the Feedrion service: server names or paths,
+  private hosts, VPN/mesh details, runner names, monitoring hosts, internal
+  ports. The only Feedrion address in this repo is the public API
+  (`https://api.feedrion.com/api`) and `https://feedrion.com`.
+- Personal data, including the owner's e-mail address.
+- Self-hosted runner labels hard-coded in a workflow. CI reads them from the
+  `CI_RUNS_ON` repository variable, defaulting to GitHub-hosted; a public
+  repository must run on GitHub-hosted runners (a PR from anyone would run on
+  a self-hosted one). See `docs/PUBLISHING.md`.
+
+## Layout
+- `src/Feedrion.MediaServer.Core` — netstandard2.0, no server reference.
+  `FeedrionClient` (API, token rotation), `LinkStore` (one JSON file per linked
+  server user, atomic writes), `SyncEngine` (the pass), `Scrobble`.
+  Compiled INTO each plugin (`<Compile Include=…>`), never shipped as its own
+  DLL: a plugin is one assembly.
+- `src/Jellyfin.Plugin.Feedrion` — Jellyfin 12.x, net10.0.
+- `src/Emby.Plugin.Feedrion` — Emby 4.9, netstandard2.0.
+- `tests/Feedrion.MediaServer.Core.Tests` — xunit, a fake Feedrion API.
+
+## Rules that must not drift
+- **Premium as a whole.** A 402 or `premium: false` sends nothing and DROPS
+  nothing: events stay queued until the account is Premium again.
+- **Only TheTVDB ids leave the server.** No title, file name, path or server
+  user name in any payload. An episode without a TheTVDB id is ignored.
+- **The threshold belongs to the reader**, read from
+  `GET /integrations/v1/mediaserver/config`; the server's own "played to
+  completion" always counts.
+- **Echo suppression**: a watch pulled from Feedrion and marked played here
+  must not be sent back (5-minute window, set BEFORE touching the server).
+- **The last event about an episode wins** in the queue; the queue is bounded.
+- **A 401 after one refresh means revoked**: forget the tokens, keep the link
+  row so the admin page can say so.
+- **https only** for the API address; plain http is refused.
+- The API contract lives in the Feedrion API (`/integrations/v1/*`). Changes
+  there are additive; this client must tolerate unknown fields.
+
+## Before pushing
+`dotnet build Feedrion.MediaServer.slnx` (warnings are errors) and
+`dotnet test tests/Feedrion.MediaServer.Core.Tests`.

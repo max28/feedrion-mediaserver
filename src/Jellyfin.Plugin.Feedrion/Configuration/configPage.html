@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Feedrion</title>
+</head>
+<body>
+    <div id="FeedrionConfigPage" data-role="page" class="page type-interior pluginConfigurationPage"
+         data-require="emby-input,emby-button,emby-select">
+        <div data-role="content">
+            <div class="content-primary">
+                <h2 class="sectionTitle">Feedrion</h2>
+                <p>
+                    Watched episodes go to the « Séries » extension of each linked Feedrion account,
+                    the episodes this server holds appear there as « available on this server »,
+                    and what was watched elsewhere is marked played here. Only TheTVDB ids leave this
+                    server — never a title, a file name or a path. Requires Feedrion Premium.
+                </p>
+
+                <h3>Users</h3>
+                <p class="fieldDescription">
+                    Link a user, then type the code in the Feedrion app of THAT user
+                    (Settings ▸ Integrations ▸ Connected devices). How far an episode must be played,
+                    and whether shows never started are followed, are set there, in the app.
+                </p>
+                <div id="feedrionLinks"></div>
+                <div style="margin: 1em 0;">
+                    <button is="emby-button" type="button" id="feedrionSyncNow" class="raised button-alt">
+                        <span>Sync now</span>
+                    </button>
+                </div>
+
+                <form id="FeedrionConfigForm">
+                    <h3>Server</h3>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="PublicServerUrl">Public address of this server</label>
+                        <input id="PublicServerUrl" name="PublicServerUrl" type="url" is="emby-input" />
+                        <div class="fieldDescription">
+                            Optional. Turns « available on this server » into a link that opens the episode here,
+                            in the reader's own browser. Feedrion never connects to it.
+                        </div>
+                    </div>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="SyncIntervalMinutes">Minutes between two passes</label>
+                        <input id="SyncIntervalMinutes" name="SyncIntervalMinutes" type="number" min="5" max="1440" is="emby-input" />
+                        <div class="fieldDescription">A playback is sent within seconds whatever this says.</div>
+                    </div>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="ApiBaseUrl">Feedrion API address</label>
+                        <input id="ApiBaseUrl" name="ApiBaseUrl" type="url" is="emby-input" />
+                        <div class="fieldDescription">Leave the default unless told otherwise. https only.</div>
+                    </div>
+                    <div>
+                        <button is="emby-button" type="submit" class="raised button-submit block emby-button">
+                            <span>Save</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <script type="text/javascript">
+            (function () {
+                var pluginId = '5f0c2a8e-6b1d-4c7e-9a3f-2d8e1b4c6a90';
+                var page = document.querySelector('#FeedrionConfigPage');
+                var timer = null;
+
+                function el(tag, text, cls) {
+                    var node = document.createElement(tag);
+                    if (text) node.textContent = text;
+                    if (cls) node.className = cls;
+                    return node;
+                }
+
+                function call(method, path) {
+                    return ApiClient.fetch({ type: method, url: ApiClient.getUrl(path), dataType: 'json' })
+                        .catch(function () { return null; });
+                }
+
+                function statusText(link) {
+                    if (link.pairingCode) return 'Code: ' + link.pairingCode + ' — type it in the Feedrion app.';
+                    if (!link.linked) return link.lastError === 'revoked' ? 'Disconnected from the app.' : 'Not linked.';
+                    var who = link.feedrionName ? 'Linked to ' + link.feedrionName : 'Linked';
+                    if (link.premium === false) return who + ' — Premium required, nothing is exchanged.';
+                    if (link.lastError) return who + ' — last pass: ' + link.lastError;
+                    return who + (link.lastSyncAt ? ' — synced ' + new Date(link.lastSyncAt).toLocaleString() : '');
+                }
+
+                function render(links) {
+                    var box = page.querySelector('#feedrionLinks');
+                    box.textContent = '';
+                    (links || []).forEach(function (link) {
+                        var row = el('div', null, 'listItem');
+                        row.style.display = 'flex';
+                        row.style.alignItems = 'center';
+                        row.style.gap = '1em';
+                        row.style.padding = '.5em 0';
+                        var body = el('div');
+                        body.style.flex = '1';
+                        body.appendChild(el('div', link.userName || link.userId, 'listItemBodyText'));
+                        body.appendChild(el('div', statusText(link), 'secondary listItemBodyText'));
+                        if (link.pairingUrl) {
+                            var a = el('a', link.pairingUrl);
+                            a.href = link.pairingUrl;
+                            a.target = '_blank';
+                            a.rel = 'noopener noreferrer';
+                            body.appendChild(a);
+                        }
+                        row.appendChild(body);
+                        var button = el('button');
+                        button.setAttribute('is', 'emby-button');
+                        button.className = 'raised button-alt';
+                        button.type = 'button';
+                        button.appendChild(el('span', link.linked ? 'Unlink' : 'Link'));
+                        button.addEventListener('click', function () {
+                            var path = 'Feedrion/Links/' + encodeURIComponent(link.userId);
+                            var request = link.linked ? call('DELETE', path) : call('POST', path + '/Start');
+                            request.then(refresh);
+                        });
+                        row.appendChild(button);
+                        box.appendChild(row);
+                    });
+                }
+
+                function refresh() {
+                    call('GET', 'Feedrion/Links').then(function (links) {
+                        render(links);
+                        var waiting = (links || []).some(function (l) { return !!l.pairingCode; });
+                        clearTimeout(timer);
+                        if (waiting) timer = setTimeout(refresh, 3000);
+                    });
+                }
+
+                page.addEventListener('pageshow', function () {
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                        page.querySelector('#PublicServerUrl').value = config.PublicServerUrl || '';
+                        page.querySelector('#SyncIntervalMinutes').value = config.SyncIntervalMinutes || 15;
+                        page.querySelector('#ApiBaseUrl').value = config.ApiBaseUrl || '';
+                        Dashboard.hideLoadingMsg();
+                    });
+                    refresh();
+                });
+
+                page.addEventListener('pagehide', function () { clearTimeout(timer); });
+
+                page.querySelector('#feedrionSyncNow').addEventListener('click', function () {
+                    call('POST', 'Feedrion/Sync').then(function () { setTimeout(refresh, 15000); });
+                });
+
+                page.querySelector('#FeedrionConfigForm').addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                        config.PublicServerUrl = page.querySelector('#PublicServerUrl').value.trim();
+                        config.SyncIntervalMinutes = parseInt(page.querySelector('#SyncIntervalMinutes').value, 10) || 15;
+                        config.ApiBaseUrl = page.querySelector('#ApiBaseUrl').value.trim();
+                        ApiClient.updatePluginConfiguration(pluginId, config)
+                            .then(Dashboard.processPluginConfigurationUpdateResult);
+                    });
+                    return false;
+                });
+            })();
+        </script>
+    </div>
+</body>
+</html>

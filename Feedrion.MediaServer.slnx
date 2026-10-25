@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Emby.Plugin.Feedrion/Emby.Plugin.Feedrion.csproj" />
+    <Project Path="src/Feedrion.MediaServer.Core/Feedrion.MediaServer.Core.csproj" />
+    <Project Path="src/Jellyfin.Plugin.Feedrion/Jellyfin.Plugin.Feedrion.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Feedrion.MediaServer.Core.Tests/Feedrion.MediaServer.Core.Tests.csproj" />
+  </Folder>
+</Solution>
