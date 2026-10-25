@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Feedrion for Jellyfin 12.x (net10.0). GPL-3.0, like Jellyfin itself. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Jellyfin.Plugin.Feedrion</RootNamespace>
+    <AssemblyName>Jellyfin.Plugin.Feedrion</AssemblyName>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <!-- The plugin is one DLL: nothing is copied beside it. -->
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Provided by the server at runtime: compile against, never ship. -->
+    <PackageReference Include="Jellyfin.Controller" Version="12.3.0" ExcludeAssets="runtime" />
+    <PackageReference Include="Jellyfin.Model" Version="12.3.0" ExcludeAssets="runtime" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The shared logic, compiled in (see Feedrion.MediaServer.Core.csproj). -->
+    <Compile Include="..\Feedrion.MediaServer.Core\*.cs" LinkBase="Core" />
+    <EmbeddedResource Include="Configuration\configPage.html" />
+  </ItemGroup>
+</Project>

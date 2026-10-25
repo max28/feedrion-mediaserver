@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The logic both plugins share: the Feedrion API client, the scrobble rule,
+    the pairing flow, the persistent outbox and the sync loop. Its sources are
+    COMPILED INTO each plugin (see their .csproj) rather than shipped as a
+    second assembly, so neither server has a dependency to load beside the
+    plugin. This project exists so the logic is built and tested on its own.
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>Feedrion.MediaServer.Core</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Both servers ship System.Text.Json in their runtime; compile against it only. -->
+    <PackageReference Include="System.Text.Json" Version="8.0.5" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

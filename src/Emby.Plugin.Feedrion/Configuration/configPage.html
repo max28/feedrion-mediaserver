@@ -1,0 +1,45 @@
+<div data-role="page" class="page type-interior pluginConfigurationPage withTabs"
+     data-require="emby-input,emby-button" data-controller="__plugin/feedrionjs">
+    <div data-role="content">
+        <div class="content-primary">
+            <h2 class="sectionTitle">Feedrion</h2>
+            <p>
+                Watched episodes go to the « Séries » extension of each linked Feedrion account,
+                the episodes this server holds appear there as « available on this server »,
+                and what was watched elsewhere is marked played here. Only TheTVDB ids leave this
+                server — never a title, a file name or a path. Requires Feedrion Premium.
+            </p>
+            <h3>Users</h3>
+            <p class="fieldDescription">
+                Link a user, then type the code in the Feedrion app of THAT user
+                (Settings ▸ Integrations ▸ Connected devices). How far an episode must be played,
+                and whether shows never started are followed, are set there, in the app.
+            </p>
+            <div class="feedrionLinks"></div>
+            <div style="margin: 1em 0;">
+                <button is="emby-button" type="button" class="raised button-alt feedrionSyncNow">
+                    <span>Sync now</span>
+                </button>
+            </div>
+            <form class="feedrionConfigForm">
+                <h3>Server</h3>
+                <div class="inputContainer">
+                    <input is="emby-input" type="url" class="txtPublicServerUrl" label="Public address of this server" />
+                    <div class="fieldDescription">
+                        Optional. Turns « available on this server » into a link that opens the episode here,
+                        in the reader's own browser. Feedrion never connects to it.
+                    </div>
+                </div>
+                <div class="inputContainer">
+                    <input is="emby-input" type="number" min="5" max="1440" class="txtSyncInterval" label="Minutes between two passes" />
+                    <div class="fieldDescription">A playback is sent within seconds whatever this says.</div>
+                </div>
+                <div class="inputContainer">
+                    <input is="emby-input" type="url" class="txtApiBaseUrl" label="Feedrion API address" />
+                    <div class="fieldDescription">Leave the default unless told otherwise. https only.</div>
+                </div>
+                <button is="emby-button" type="submit" class="raised button-submit block"><span>Save</span></button>
+            </form>
+        </div>
+    </div>
+</div>

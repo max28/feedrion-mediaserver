@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Feedrion for Emby Server 4.9 (netstandard2.0, Emby's plugin target). -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>Emby.Plugin.Feedrion</RootNamespace>
+    <AssemblyName>Emby.Plugin.Feedrion</AssemblyName>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <NoWarn>$(NoWarn);NU1701</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="MediaBrowser.Server.Core" Version="4.9.1.90" ExcludeAssets="runtime" />
+    <!-- Emby's runtime carries it; compile against it only. -->
+    <PackageReference Include="System.Text.Json" Version="8.0.5" PrivateAssets="all" ExcludeAssets="runtime" />
+    <PackageReference Include="System.Memory" Version="4.6.3" PrivateAssets="all" ExcludeAssets="runtime" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\Feedrion.MediaServer.Core\*.cs" LinkBase="Core" />
+    <EmbeddedResource Include="Configuration\configPage.html" />
+    <EmbeddedResource Include="Configuration\configPage.js" />
+  </ItemGroup>
+</Project>
