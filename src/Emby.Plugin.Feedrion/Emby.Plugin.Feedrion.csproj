@@ -10,7 +10,7 @@
   <ItemGroup>
     <PackageReference Include="MediaBrowser.Server.Core" Version="4.9.1.90" ExcludeAssets="runtime" />
     <!-- Emby's runtime carries it; compile against it only. -->
-    <PackageReference Include="System.Text.Json" Version="8.0.5" PrivateAssets="all" ExcludeAssets="runtime" />
+    <PackageReference Include="System.Text.Json" Version="10.0.14" PrivateAssets="all" ExcludeAssets="runtime" />
     <PackageReference Include="System.Memory" Version="4.6.3" PrivateAssets="all" ExcludeAssets="runtime" />
   </ItemGroup>
   <ItemGroup>
