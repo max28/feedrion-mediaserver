@@ -11,3 +11,7 @@ updates:
     ignore:
       - dependency-name: "Jellyfin.*"
       - dependency-name: "MediaBrowser.*"
+      # Compiled against, never shipped: the servers provide it, and Emby runs on
+      # .NET 8. A newer major makes the Emby plugin unloadable.
+      - dependency-name: "System.Text.Json"
+        update-types: ["version-update:semver-major"]

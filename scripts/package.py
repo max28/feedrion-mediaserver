@@ -55,6 +55,20 @@ def _jellyfin_abi(csproj: pathlib.Path) -> str:
     return ".".join(parts)
 
 
+# Emby runs on .NET 8: an assembly compiled against a newer System.Text.Json
+# asks for a version the server does not have, and the plugin never starts.
+EMBY_MAX_STJ_MAJOR = 8
+
+
+def _check_emby_references(csproj: pathlib.Path) -> None:
+    m = re.search(r'Include="System\.Text\.Json"\s+Version="(\d+)\.', csproj.read_text())
+    if m and int(m.group(1)) > EMBY_MAX_STJ_MAJOR:
+        raise SystemExit(
+            f"{csproj.name}: System.Text.Json {m.group(1)}.x is newer than what Emby's .NET "
+            f"{EMBY_MAX_STJ_MAJOR} runtime provides; the plugin would not load"
+        )
+
+
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--version", required=True)
@@ -69,6 +83,7 @@ def main() -> None:
         raise SystemExit("version must be X.Y.Z")
     a.out.mkdir(parents=True, exist_ok=True)
     root = pathlib.Path(__file__).resolve().parent.parent
+    _check_emby_references(root / "src/Emby.Plugin.Feedrion/Emby.Plugin.Feedrion.csproj")
 
     jf_dll = a.jellyfin / "Jellyfin.Plugin.Feedrion.dll"
     emby_dll = a.emby / "Emby.Plugin.Feedrion.dll"

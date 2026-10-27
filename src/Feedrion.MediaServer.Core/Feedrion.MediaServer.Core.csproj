@@ -12,6 +12,6 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- Both servers ship System.Text.Json in their runtime; compile against it only. -->
-    <PackageReference Include="System.Text.Json" Version="10.0.14" PrivateAssets="all" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" PrivateAssets="all" />
   </ItemGroup>
 </Project>
