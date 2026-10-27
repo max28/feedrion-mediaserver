@@ -24,6 +24,7 @@ namespace Feedrion.MediaServer.Core.Tests
         public int ScrobblePercent { get; set; } = 90;
         public List<RemoteWatch> Watches { get; } = new List<RemoteWatch>();
         public List<List<WatchEvent>> EventBatches { get; } = new List<List<WatchEvent>>();
+        public List<bool?> EventBatchAddNewShows { get; } = new List<bool?>();
         public List<LibraryBatch> LibraryBatches { get; } = new List<LibraryBatch>();
         public string PairStatus { get; set; } = "pending";
 
@@ -62,6 +63,7 @@ namespace Feedrion.MediaServer.Core.Tests
             {
                 var doc = JsonDocument.Parse(body!);
                 EventBatches.Add(JsonSerializer.Deserialize<List<WatchEvent>>(doc.RootElement.GetProperty("events").GetRawText())!);
+                EventBatchAddNewShows.Add(doc.RootElement.TryGetProperty("add_new_shows", out var add) ? add.GetBoolean() : (bool?)null);
                 return Json(new { accepted = 1, ignored = 0 });
             }
             if (path.StartsWith("/api/integrations/v1/mediaserver/library"))
@@ -96,13 +98,24 @@ namespace Feedrion.MediaServer.Core.Tests
         public List<LibraryItem> Library { get; } = new List<LibraryItem>();
         public List<WatchEvent> History { get; } = new List<WatchEvent>();
         public List<RemoteWatch> Marked { get; } = new List<RemoteWatch>();
+        public List<MediaLibrary> Libraries { get; } = new List<MediaLibrary>
+        {
+            new MediaLibrary { Id = "lib-shows", Name = "Shows", Type = "tvshows" },
+            new MediaLibrary { Id = "lib-kids", Name = "Kids", Type = "tvshows" },
+        };
 
         public ServerInfo DescribeServer() => new ServerInfo { ServerId = "srv", ServerName = "Salon", ClientVersion = "test" };
+        public IReadOnlyList<MediaLibrary> ListLibraries() => Libraries;
         public IReadOnlyList<LibraryItem> ListLibraryEpisodes() => Library;
         public IReadOnlyList<WatchEvent> ListPlayedEpisodes(string serverUserId) => History;
 
-        public bool MarkPlayed(string serverUserId, RemoteWatch watch)
+        /// <summary>The library each series sits in, for MarkPlayed.</summary>
+        public Dictionary<int, string> SeriesLibrary { get; } = new Dictionary<int, string>();
+
+        public bool MarkPlayed(string serverUserId, RemoteWatch watch, Func<IReadOnlyList<string>?, bool> covers)
         {
+            var library = SeriesLibrary.TryGetValue(watch.TvdbSeriesId, out var l) ? new[] { l } : null;
+            if (!covers(library)) return false;
             Marked.Add(watch);
             return true;
         }

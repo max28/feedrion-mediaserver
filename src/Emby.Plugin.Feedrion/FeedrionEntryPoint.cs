@@ -168,7 +168,7 @@ namespace Emby.Plugin.Feedrion
             try
             {
                 if (!(e.Item is Episode episode)) return;
-                var reference = EmbyAdapter.ToRef(episode);
+                var reference = Adapter.Reference(episode);
                 if (reference == null) return;
                 var percent = Scrobble.PlayedPercent(e.PlaybackPositionTicks, episode.RunTimeTicks);
                 foreach (var user in e.Users)
@@ -185,7 +185,7 @@ namespace Emby.Plugin.Feedrion
             if (e.SaveReason != UserDataSaveReason.TogglePlayed || !(e.Item is Episode episode) || e.User == null) return;
             try
             {
-                var reference = EmbyAdapter.ToRef(episode);
+                var reference = Adapter.Reference(episode);
                 if (reference == null || e.UserData == null) return;
                 Engine.RecordPlayedToggle(EmbyAdapter.UserKey(e.User), reference, e.UserData.Played);
             }
@@ -197,7 +197,16 @@ namespace Emby.Plugin.Feedrion
 
         private void OnItemAdded(object? sender, ItemChangeEventArgs e)
         {
-            var item = EmbyAdapter.ToLibraryItem(e.Item);
+            LibraryItem? item;
+            try
+            {
+                item = Adapter.Item(e.Item);
+            }
+            catch (Exception ex)
+            {
+                _logger.ErrorException("Feedrion: could not read an added episode", ex);
+                return;
+            }
             if (item == null) return;
             _removed.TryRemove(item.TvdbEpisodeId, out _);
             _added[item.TvdbEpisodeId] = item;

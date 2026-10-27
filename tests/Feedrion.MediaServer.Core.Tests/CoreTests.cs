@@ -239,5 +239,103 @@ namespace Feedrion.MediaServer.Core.Tests
             Assert.NotNull(store.Get(UserId)!.LastSyncAt);
             Assert.Null(store.Get(UserId)!.LastError);
         }
+    
+        [Fact]
+        public async Task A_link_does_not_add_new_series_unless_told_to()
+        {
+            var (engine, store) = Engine();
+            engine.RecordPlayedToggle(UserId, Ep(801), played: true);
+            await engine.RunOnceAsync(CancellationToken.None);
+            Assert.False(store.Get(UserId)!.AddNewShows);
+            Assert.Equal(new bool?[] { false }, _api.EventBatchAddNewShows.ToArray());
+
+            engine.UpdateSettings(UserId, "max", new LinkSettings { AddNewShows = true });
+            engine.RecordPlayedToggle(UserId, Ep(802), played: true);
+            await engine.RunOnceAsync(CancellationToken.None);
+            Assert.Equal(true, _api.EventBatchAddNewShows.Last());
+        }
+
+        private static EpisodeRef EpIn(int id, string library) => new EpisodeRef
+        {
+            TvdbSeriesId = 500, TvdbEpisodeId = id, Season = 1, Number = id % 100, LibraryIds = new[] { library },
+        };
+
+        [Fact]
+        public async Task A_link_only_sends_what_its_libraries_hold()
+        {
+            var (engine, store) = Engine();
+            var state = engine.UpdateSettings(UserId, "max", new LinkSettings
+            {
+                LibraryIds = new System.Collections.Generic.List<string> { "LIB-SHOWS", "gone" },
+            });
+            // Normalised, and a library the server does not have is dropped.
+            Assert.Equal(new[] { "lib-shows" }, state.LibraryIds!.ToArray());
+
+            _adapter.History.Add(new WatchEvent { TvdbSeriesId = 500, TvdbEpisodeId = 901, LibraryIds = new[] { "lib-shows" } });
+            _adapter.History.Add(new WatchEvent { TvdbSeriesId = 600, TvdbEpisodeId = 902, LibraryIds = new[] { "lib-kids" } });
+            _adapter.History.Add(new WatchEvent { TvdbSeriesId = 700, TvdbEpisodeId = 903 });
+            _adapter.Library.Add(new LibraryItem { TvdbSeriesId = 500, TvdbEpisodeId = 901, ItemId = "a", LibraryIds = new[] { "lib-shows" } });
+            _adapter.Library.Add(new LibraryItem { TvdbSeriesId = 600, TvdbEpisodeId = 902, ItemId = "b", LibraryIds = new[] { "lib-kids" } });
+            engine.RecordPlayback(UserId, EpIn(904, "lib-kids"), 100, playedToCompletion: true);
+            engine.RecordPlayedToggle(UserId, EpIn(905, "lib-shows"), played: true);
+            Assert.Equal(new int?[] { 905 }, store.Get(UserId)!.PendingEvents.Select(e => e.TvdbEpisodeId).ToArray());
+
+            _adapter.SeriesLibrary[500] = "lib-shows";
+            _adapter.SeriesLibrary[600] = "lib-kids";
+            _api.Watches.Add(new RemoteWatch { TvdbSeriesId = 600, TvdbEpisodeId = 906, Season = 1, Episode = 6, WatchedAt = DateTimeOffset.UtcNow });
+            _api.Watches.Add(new RemoteWatch { TvdbSeriesId = 500, TvdbEpisodeId = 907, Season = 1, Episode = 7, WatchedAt = DateTimeOffset.UtcNow });
+            await engine.RunOnceAsync(CancellationToken.None);
+
+            Assert.Equal(new int?[] { 901, 905 }, _api.EventBatches.Single().Select(e => e.TvdbEpisodeId).ToArray());
+            Assert.Equal(new[] { 901 }, _api.LibraryBatches.Single().Items.Select(i => i.TvdbEpisodeId).ToArray());
+            Assert.Equal(new[] { 907 }, _adapter.Marked.Select(w => w.TvdbEpisodeId).ToArray());
+
+            engine.RecordLibraryChange(new[]
+            {
+                new LibraryItem { TvdbSeriesId = 600, TvdbEpisodeId = 908, ItemId = "c", LibraryIds = new[] { "lib-kids" } },
+            }, new int[0]);
+            Assert.Empty(store.Get(UserId)!.PendingLibraryAdded);
+        }
+
+        [Fact]
+        public async Task Changing_the_settings_sends_the_inventory_and_the_history_again()
+        {
+            var (engine, store) = Engine();
+            _adapter.History.Add(new WatchEvent { TvdbSeriesId = 500, TvdbEpisodeId = 911, LibraryIds = new[] { "lib-kids" } });
+            await engine.RunOnceAsync(CancellationToken.None);
+            Assert.Single(_api.EventBatches);
+            Assert.Single(_api.LibraryBatches);
+
+            // Same settings: nothing to redo.
+            engine.UpdateSettings(UserId, "max", new LinkSettings());
+            await engine.RunOnceAsync(CancellationToken.None);
+            Assert.Single(_api.EventBatches);
+
+            engine.UpdateSettings(UserId, "max", new LinkSettings { AddNewShows = true });
+            Assert.False(store.Get(UserId)!.ImportDone);
+            Assert.Null(store.Get(UserId)!.LibraryFullAt);
+            await engine.RunOnceAsync(CancellationToken.None);
+            Assert.Equal(2, _api.EventBatches.Count);
+            Assert.Equal(2, _api.LibraryBatches.Count);
+        }
+
+        [Fact]
+        public void Settings_set_before_linking_survive_the_pairing()
+        {
+            var (engine, store) = Engine(linked: false);
+            engine.UpdateSettings(UserId, "kid", new LinkSettings { LibraryIds = new System.Collections.Generic.List<string>() });
+            var state = store.Get(UserId)!;
+            Assert.False(state.IsLinked);
+            Assert.Empty(state.LibraryIds!);
+            Assert.False(state.Covers(new[] { "lib-shows" }));
+            Assert.True(new LinkState().Covers(null));
+            Assert.False(new LinkState { LibraryIds = new System.Collections.Generic.List<string> { "lib-shows" } }.Covers(null));
+            // A file written before these settings existed reads as « all, no new series ».
+            File.WriteAllText(Path.Combine(_dir, "link-" + UserId + ".json"),
+                "{\"server_user_id\":\"" + UserId + "\",\"refresh_token\":\"r\"}");
+            var reread = new LinkStore(_dir).Get(UserId)!;
+            Assert.Null(reread.LibraryIds);
+            Assert.False(reread.AddNewShows);
+        }
     }
 }

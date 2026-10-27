@@ -20,8 +20,12 @@ namespace Emby.Plugin.Feedrion
         private readonly IUserDataManager _userData;
         private readonly IServerApplicationHost _host;
         private readonly object _gate = new object();
-        private Dictionary<string, long>? _index;
+        private Dictionary<string, LibraryItem>? _index;
         private DateTimeOffset _indexedAt;
+        // Which libraries a series sits in, for the live events (ten minutes
+        // of staleness rather than a tree walk on every playback).
+        private readonly Dictionary<long, string[]> _seriesLibraries = new Dictionary<long, string[]>();
+        private DateTimeOffset _seriesLibrariesAt;
 
         public EmbyAdapter(ILibraryManager library, IUserManager users, IUserDataManager userData, IServerApplicationHost host)
         {
@@ -65,6 +69,74 @@ namespace Emby.Plugin.Feedrion
             };
         }
 
+        /// <summary>[ToRef], with the libraries the episode sits in.</summary>
+        public EpisodeRef? Reference(BaseItem? item)
+        {
+            var reference = ToRef(item);
+            if (reference != null) reference.LibraryIds = LibrariesOf((Episode)item!, null);
+            return reference;
+        }
+
+        /// <summary>[ToLibraryItem], with the libraries the episode sits in.</summary>
+        public LibraryItem? Item(BaseItem? item)
+        {
+            var libraryItem = ToLibraryItem(item);
+            if (libraryItem != null) libraryItem.LibraryIds = LibrariesOf((Episode)item!, null);
+            return libraryItem;
+        }
+
+        // Emby's VirtualFolderInfo.Guid is the library folder's Guid, the id
+        // GetCollectionFolders answers with.
+        public IReadOnlyList<MediaLibrary> ListLibraries() => _library.GetVirtualFolders()
+            .Select(f => new MediaLibrary
+            {
+                Id = Guid.TryParse(f.Guid, out var id) ? LibraryKey(id) : "",
+                Name = f.Name ?? "",
+                Type = f.CollectionType,
+            })
+            .Where(l => l.Id.Length > 0)
+            .OrderBy(l => l.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+
+        private static string LibraryKey(Guid id) => id.ToString("N", CultureInfo.InvariantCulture);
+
+        /// <summary>The libraries [episode] sits in — those of its series.</summary>
+        private string[] LibrariesOf(Episode episode, Dictionary<long, string[]>? scan)
+        {
+            BaseItem anchor = (BaseItem?)episode.Series ?? episode;
+            var key = anchor.InternalId;
+            if (scan != null)
+            {
+                if (!scan.TryGetValue(key, out var found)) scan[key] = found = Compute(anchor);
+                return found;
+            }
+            lock (_gate)
+            {
+                if (DateTimeOffset.UtcNow - _seriesLibrariesAt > TimeSpan.FromMinutes(10))
+                {
+                    _seriesLibraries.Clear();
+                    _seriesLibrariesAt = DateTimeOffset.UtcNow;
+                }
+                if (_seriesLibraries.TryGetValue(key, out var cached)) return cached;
+            }
+            var computed = Compute(anchor);
+            lock (_gate) _seriesLibraries[key] = computed;
+            return computed;
+        }
+
+        private string[] Compute(BaseItem item)
+        {
+            try
+            {
+                return _library.GetCollectionFolders(item).Select(f => LibraryKey(f.Id)).Distinct().ToArray();
+            }
+            catch (Exception)
+            {
+                // Unknown library: a link that chose its libraries leaves it out.
+                return Array.Empty<string>();
+            }
+        }
+
         private static int? ParseId(string? raw) =>
             int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id) && id > 0 ? id : (int?)null;
 
@@ -92,7 +164,15 @@ namespace Emby.Plugin.Feedrion
 
         public IReadOnlyList<LibraryItem> ListLibraryEpisodes()
         {
-            var items = Episodes(null, null).Select(ToLibraryItem).Where(i => i != null).Select(i => i!).ToList();
+            var scan = new Dictionary<long, string[]>();
+            var items = new List<LibraryItem>();
+            foreach (var episode in Episodes(null, null).OfType<Episode>())
+            {
+                var item = ToLibraryItem(episode);
+                if (item == null) continue;
+                item.LibraryIds = LibrariesOf(episode, scan);
+                items.Add(item);
+            }
             lock (_gate)
             {
                 _index = BuildIndex(items);
@@ -106,6 +186,7 @@ namespace Emby.Plugin.Feedrion
             var user = FindUser(serverUserId);
             if (user == null) return Array.Empty<WatchEvent>();
             var events = new List<WatchEvent>();
+            var scan = new Dictionary<long, string[]>();
             foreach (var item in Episodes(user, true))
             {
                 var reference = ToRef(item);
@@ -119,18 +200,20 @@ namespace Emby.Plugin.Feedrion
                     Season = reference.TvdbEpisodeId.HasValue ? null : reference.Season,
                     Episode = reference.TvdbEpisodeId.HasValue ? null : reference.Number,
                     At = data?.LastPlayedDate,
+                    LibraryIds = LibrariesOf((Episode)item, scan),
                 });
             }
             return events.OrderBy(e => e.At ?? DateTimeOffset.MinValue).ToList();
         }
 
-        public bool MarkPlayed(string serverUserId, RemoteWatch watch)
+        public bool MarkPlayed(string serverUserId, RemoteWatch watch, Func<IReadOnlyList<string>?, bool> covers)
         {
             var user = FindUser(serverUserId);
             if (user == null) return false;
-            var itemId = Lookup(watch);
-            if (itemId == null) return false;
-            var item = _library.GetItemById(itemId.Value);
+            var held = Lookup(watch);
+            if (held == null || !covers(held.LibraryIds)
+                || !long.TryParse(held.ItemId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var itemId)) return false;
+            var item = _library.GetItemById(itemId);
             if (item == null) return false;
             var data = _userData.GetUserData(user, item);
             if (data == null || data.Played) return false;
@@ -141,9 +224,9 @@ namespace Emby.Plugin.Feedrion
             return true;
         }
 
-        private long? Lookup(RemoteWatch watch)
+        private LibraryItem? Lookup(RemoteWatch watch)
         {
-            Dictionary<string, long>? index;
+            Dictionary<string, LibraryItem>? index;
             lock (_gate)
             {
                 index = _index;
@@ -157,18 +240,17 @@ namespace Emby.Plugin.Feedrion
             if (index == null) return null;
             if (index.TryGetValue("e" + watch.TvdbEpisodeId, out var byId)) return byId;
             return index.TryGetValue("s" + watch.TvdbSeriesId + ":" + watch.Season + ":" + watch.Episode, out var byNumber)
-                ? byNumber : (long?)null;
+                ? byNumber : null;
         }
 
-        private static Dictionary<string, long> BuildIndex(IEnumerable<LibraryItem> items)
+        private static Dictionary<string, LibraryItem> BuildIndex(IEnumerable<LibraryItem> items)
         {
-            var index = new Dictionary<string, long>(StringComparer.Ordinal);
+            var index = new Dictionary<string, LibraryItem>(StringComparer.Ordinal);
             foreach (var item in items)
             {
-                if (!long.TryParse(item.ItemId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id)) continue;
-                index["e" + item.TvdbEpisodeId] = id;
+                index["e" + item.TvdbEpisodeId] = item;
                 if (item.Season.HasValue && item.Number.HasValue)
-                    index["s" + item.TvdbSeriesId + ":" + item.Season + ":" + item.Number] = id;
+                    index["s" + item.TvdbSeriesId + ":" + item.Season + ":" + item.Number] = item;
             }
             return index;
         }

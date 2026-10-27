@@ -21,6 +21,89 @@ define(['loading', 'emby-input', 'emby-button'], function (loading) {
             .catch(function () { return null; });
     }
 
+    var openPanels = {};
+
+    function checkbox(label, checked) {
+        var wrap = el('label');
+        wrap.style.display = 'block';
+        wrap.style.margin = '.3em 0';
+        var input = el('input');
+        input.type = 'checkbox';
+        input.checked = !!checked;
+        input.style.marginRight = '.5em';
+        wrap.appendChild(input);
+        wrap.appendChild(document.createTextNode(label));
+        return { node: wrap, input: input };
+    }
+
+    function settingsPanel(l, libraries, done) {
+        var userId = pick(l, 'userId');
+        var addNew = !!pick(l, 'addNewShows');
+        var chosen = pick(l, 'libraryIds');
+        if (chosen === undefined) chosen = null;
+        var panel = el('details');
+        panel.style.margin = '.3em 0 .6em';
+        // Re-rendered every few seconds while a code is pending: stay open.
+        panel.open = !!openPanels[userId];
+        panel.addEventListener('toggle', function () { openPanels[userId] = panel.open; });
+        var summary = el('summary', 'Options — ' + (addNew ? 'adds new series' : 'followed series only')
+            + ', ' + (chosen === null ? 'all libraries' : chosen.length + ' of ' + libraries.length + ' libraries'));
+        summary.style.cursor = 'pointer';
+        panel.appendChild(summary);
+        var add = checkbox('Add to Feedrion the series this user watches that it does not follow yet', addNew);
+        panel.appendChild(add.node);
+        panel.appendChild(el('div', 'Linked libraries', 'fieldDescription'));
+        var all = checkbox('All libraries, including the ones added later', chosen === null);
+        panel.appendChild(all.node);
+        var boxes = [];
+        var list = el('div');
+        list.style.marginLeft = '1.5em';
+        libraries.forEach(function (lib) {
+            var id = pick(lib, 'id');
+            var type = pick(lib, 'type');
+            var box = checkbox(pick(lib, 'name') + (type ? ' (' + type + ')' : ''),
+                chosen === null || chosen.indexOf(id) >= 0);
+            box.input.value = id;
+            boxes.push(box.input);
+            list.appendChild(box.node);
+        });
+        function sync() {
+            boxes.forEach(function (b) { b.disabled = all.input.checked; });
+        }
+        all.input.addEventListener('change', sync);
+        sync();
+        panel.appendChild(list);
+        var save = el('button');
+        save.setAttribute('is', 'emby-button');
+        save.className = 'raised button-alt';
+        save.type = 'button';
+        save.appendChild(el('span', 'Save options'));
+        var note = el('span', '', 'fieldDescription');
+        note.style.marginLeft = '1em';
+        save.addEventListener('click', function () {
+            save.disabled = true;
+            ApiClient.ajax({
+                type: 'POST',
+                url: ApiClient.getUrl('Feedrion/Links/' + encodeURIComponent(userId) + '/Settings'),
+                data: JSON.stringify({
+                    AddNewShows: add.input.checked,
+                    AllLibraries: all.input.checked,
+                    LibraryIds: boxes.filter(function (b) { return b.checked; }).map(function (b) { return b.value; }).join(',')
+                }),
+                contentType: 'application/json',
+                dataType: 'json'
+            }).then(function () {
+                note.textContent = 'Saved — sent again at the next pass.';
+                setTimeout(done, 1500);
+            }, function () {
+                note.textContent = 'Could not save.';
+            }).then(function () { save.disabled = false; });
+        });
+        panel.appendChild(save);
+        panel.appendChild(note);
+        return panel;
+    }
+
     function statusText(l) {
         var code = pick(l, 'pairingCode');
         if (code) return 'Code: ' + code + ' — type it in the Feedrion app.';
@@ -35,6 +118,7 @@ define(['loading', 'emby-input', 'emby-button'], function (loading) {
 
     return function (view) {
         var timer = null;
+        var libraries = [];
 
         function render(links) {
             var box = view.querySelector('.feedrionLinks');
@@ -57,6 +141,7 @@ define(['loading', 'emby-input', 'emby-button'], function (loading) {
                     a.rel = 'noopener noreferrer';
                     body.appendChild(a);
                 }
+                body.appendChild(settingsPanel(l, libraries, refresh));
                 row.appendChild(body);
                 var button = el('button');
                 button.setAttribute('is', 'emby-button');
@@ -73,7 +158,9 @@ define(['loading', 'emby-input', 'emby-button'], function (loading) {
         }
 
         function refresh() {
-            call('GET', 'Feedrion/Links').then(function (links) {
+            Promise.all([call('GET', 'Feedrion/Libraries'), call('GET', 'Feedrion/Links')]).then(function (both) {
+                libraries = both[0] || [];
+                var links = both[1];
                 render(links);
                 var waiting = (links || []).some(function (l) { return !!pick(l, 'pairingCode'); });
                 clearTimeout(timer);

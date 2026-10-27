@@ -108,8 +108,11 @@ namespace Feedrion.MediaServer.Core
         public Task<ServerInfo> PutServerAsync(ServerInfo info, CancellationToken ct) =>
             SendAsync<ServerInfo>(HttpMethod.Put, "/integrations/v1/mediaserver/server", info, true, ct);
 
-        public Task<EventsResult> PostEventsAsync(System.Collections.Generic.IList<WatchEvent> events, CancellationToken ct) =>
-            SendAsync<EventsResult>(HttpMethod.Post, "/integrations/v1/mediaserver/events", new { events }, true, ct);
+        /// <summary>[addNewShows] false: Feedrion applies these watches only to
+        /// series the account already follows.</summary>
+        public Task<EventsResult> PostEventsAsync(System.Collections.Generic.IList<WatchEvent> events, bool addNewShows, CancellationToken ct) =>
+            SendAsync<EventsResult>(HttpMethod.Post, "/integrations/v1/mediaserver/events",
+                new { events, add_new_shows = addNewShows }, true, ct);
 
         public Task<LibraryResult> PostLibraryAsync(LibraryBatch batch, CancellationToken ct) =>
             SendAsync<LibraryResult>(HttpMethod.Post, "/integrations/v1/mediaserver/library", batch, true, ct);

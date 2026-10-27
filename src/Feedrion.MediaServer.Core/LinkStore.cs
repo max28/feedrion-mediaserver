@@ -32,6 +32,16 @@ namespace Feedrion.MediaServer.Core
         [JsonPropertyName("scrobble_percent")] public int ScrobblePercent { get; set; } = Scrobble.DefaultThresholdPercent;
         [JsonPropertyName("follow_library")] public bool FollowLibrary { get; set; }
 
+        // Set by the server's administrator on the configuration page.
+        /// <summary>Whether a watch of a series the Feedrion account does not
+        /// follow yet makes it follow it. Off by default: a server user shared
+        /// with the family would otherwise fill « Mes séries » with what the
+        /// others watch.</summary>
+        [JsonPropertyName("add_new_shows")] public bool AddNewShows { get; set; }
+
+        /// <summary>The libraries this link covers; null for all of them.</summary>
+        [JsonPropertyName("library_ids")] public List<string>? LibraryIds { get; set; }
+
         // Progress.
         [JsonPropertyName("watch_cursor")] public string? WatchCursor { get; set; }
         [JsonPropertyName("import_done")] public bool ImportDone { get; set; }
@@ -45,6 +55,17 @@ namespace Feedrion.MediaServer.Core
         [JsonPropertyName("pending_library_removed")] public List<int> PendingLibraryRemoved { get; set; } = new List<int>();
 
         [JsonIgnore] public bool IsLinked => !string.IsNullOrEmpty(RefreshToken);
+
+        /// <summary>Whether an episode in [libraries] is this link's business.
+        /// With a choice made, an episode whose library is unknown is not.</summary>
+        public bool Covers(IReadOnlyList<string>? libraries)
+        {
+            if (LibraryIds == null) return true;
+            if (libraries == null) return false;
+            foreach (var id in libraries)
+                if (LibraryIds.Contains(id, StringComparer.OrdinalIgnoreCase)) return true;
+            return false;
+        }
 
         /// <summary>Queue an event; a newer event about the same episode
         /// replaces the older one (the last word decides).</summary>

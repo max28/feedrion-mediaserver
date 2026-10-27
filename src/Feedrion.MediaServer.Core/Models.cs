@@ -67,6 +67,10 @@ namespace Feedrion.MediaServer.Core
         [JsonPropertyName("at")] public DateTimeOffset? At { get; set; }
         [JsonPropertyName("percent")] public double? Percent { get; set; }
 
+        /// <summary>The libraries the episode sits in, to hold the history
+        /// import to a link's choice. Never sent, never stored.</summary>
+        [JsonIgnore] public IReadOnlyList<string>? LibraryIds { get; set; }
+
         /// <summary>The same episode, whatever the event says about it.</summary>
         [JsonIgnore]
         public string EpisodeKey => TvdbEpisodeId.HasValue
@@ -93,6 +97,28 @@ namespace Feedrion.MediaServer.Core
         // never sent (the API matches on ids).
         [JsonIgnore] public int? Season { get; set; }
         [JsonIgnore] public int? Number { get; set; }
+
+        // The libraries the episode sits in: what a link's choice of libraries
+        // is checked against. Never sent.
+        [JsonIgnore] public IReadOnlyList<string>? LibraryIds { get; set; }
+    }
+
+    /// <summary>One library of the server, for the configuration page. Its name
+    /// never leaves the server.</summary>
+    public sealed class MediaLibrary
+    {
+        [JsonPropertyName("id")] public string Id { get; set; } = "";
+        [JsonPropertyName("name")] public string Name { get; set; } = "";
+        [JsonPropertyName("type")] public string? Type { get; set; }
+    }
+
+    /// <summary>What the configuration page sets on one server user's link.</summary>
+    public sealed class LinkSettings
+    {
+        [JsonPropertyName("addNewShows")] public bool AddNewShows { get; set; }
+
+        /// <summary>Null: every library, including the ones added later.</summary>
+        [JsonPropertyName("libraryIds")] public List<string>? LibraryIds { get; set; }
     }
 
     public sealed class LibraryBatch

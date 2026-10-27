@@ -66,6 +66,22 @@ namespace Jellyfin.Plugin.Feedrion
             }
         }
 
+        /// <summary>The server's libraries, for the per-user choice.</summary>
+        [HttpGet("Libraries")]
+        public ActionResult<IEnumerable<MediaLibrary>> GetLibraries() => _engine.ListLibraries().ToList();
+
+        /// <summary>What a server user's link sends: which libraries, and
+        /// whether a series not followed yet in Feedrion gets added.</summary>
+        [HttpPost("Links/{userId}/Settings")]
+        public ActionResult<LinkView> UpdateSettings([FromRoute] string userId, [FromBody] LinkSettings settings)
+        {
+            if (!Guid.TryParse(userId, out var id) || _users.GetUserById(id) is not { } user)
+                return NotFound();
+            var key = JellyfinAdapter.UserKey(user.Id);
+            var state = _engine.UpdateSettings(key, user.Username, settings ?? new LinkSettings());
+            return LinkView.From(key, user.Username, state, _engine.GetPending(key));
+        }
+
         [HttpDelete("Links/{userId}")]
         public async Task<ActionResult> Unlink([FromRoute] string userId, CancellationToken ct)
         {

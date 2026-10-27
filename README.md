@@ -62,6 +62,19 @@ Copy `Emby.Plugin.Feedrion.dll` from `feedrion-emby-<version>.zip` into Emby's
 The scrobble threshold and "follow the shows in my library" are per reader and
 live in the app: Séries ▸ Settings ▸ Jellyfin / Emby.
 
+Each user's **Options** on the plugin page (they can be set before linking):
+
+- **Add new series** — off by default. A watch of a series the Feedrion account
+  does not follow yet is then left out, instead of adding the series to
+  "Mes séries". Keep it off on a profile the family shares.
+- **Linked libraries** — all of them by default (libraries added later
+  included), or the ones ticked. Only those libraries' episodes are sent as
+  watched or available, and only their episodes are marked played from
+  Feedrion.
+
+Changing either sends the library and the watch history again at the next
+pass; Feedrion skips the watches it already has.
+
 ## Verify a download
 
 Every release asset is signed with [cosign](https://docs.sigstore.dev/) (keyless):

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace Feedrion.MediaServer.Core
@@ -20,6 +21,8 @@ namespace Feedrion.MediaServer.Core
         [JsonPropertyName("pairingUrl")] public string? PairingUrl { get; set; }
         [JsonPropertyName("pairingExpiresAt")] public DateTimeOffset? PairingExpiresAt { get; set; }
         [JsonPropertyName("pairingError")] public string? PairingError { get; set; }
+        [JsonPropertyName("addNewShows")] public bool AddNewShows { get; set; }
+        [JsonPropertyName("libraryIds")] public List<string>? LibraryIds { get; set; }
 
         public static LinkView From(string userId, string? userName, LinkState? link, PendingLink? pending) => new LinkView
         {
@@ -36,6 +39,8 @@ namespace Feedrion.MediaServer.Core
             PairingUrl = pending?.VerificationUrl,
             PairingExpiresAt = pending?.ExpiresAt,
             PairingError = pending?.Error,
+            AddNewShows = link?.AddNewShows ?? false,
+            LibraryIds = link?.LibraryIds,
         };
     }
 }

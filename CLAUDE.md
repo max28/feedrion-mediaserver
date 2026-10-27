@@ -31,6 +31,12 @@ message and comment as if it already were.
   nothing: events stay queued until the account is Premium again.
 - **Only TheTVDB ids leave the server.** No title, file name, path or server
   user name in any payload. An episode without a TheTVDB id is ignored.
+- **Per-link options belong to the server admin** (`LinkState.AddNewShows`,
+  off by default, sent as `add_new_shows` with every events batch;
+  `LinkState.LibraryIds`, null = every library). A choice of libraries filters
+  everything: history import, live events, inventory, and the reverse
+  `MarkPlayed`. With a choice made, an episode whose library is unknown is
+  left out. A change resets `ImportDone` and `LibraryFullAt`.
 - **The threshold belongs to the reader**, read from
   `GET /integrations/v1/mediaserver/config`; the server's own "played to
   completion" always counts.
