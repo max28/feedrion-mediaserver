@@ -218,5 +218,26 @@ namespace Feedrion.MediaServer.Core.Tests
             Assert.Empty(state.PendingLibraryAdded);
             Assert.Null(state.LibraryFullAt);
         }
+
+        [Fact]
+        public async Task Sync_now_runs_a_pass_at_once_and_sends_the_whole_library_again()
+        {
+            var (engine, store) = Engine();
+            _adapter.Library.Add(new LibraryItem { TvdbSeriesId = 500, TvdbEpisodeId = 501, ItemId = "a" });
+            await engine.RunOnceAsync(CancellationToken.None);
+            Assert.Single(_api.LibraryBatches);
+
+            // A periodic pass within the day sends nothing new…
+            await engine.RunOnceAsync(CancellationToken.None);
+            Assert.Single(_api.LibraryBatches);
+
+            // …« Sync now » does, and has finished when it returns.
+            store.Get(UserId)!.LastSyncAt = null;
+            await engine.SyncNowAsync(CancellationToken.None);
+            Assert.Equal(2, _api.LibraryBatches.Count);
+            Assert.True(_api.LibraryBatches[1].Final);
+            Assert.NotNull(store.Get(UserId)!.LastSyncAt);
+            Assert.Null(store.Get(UserId)!.LastError);
+        }
     }
 }

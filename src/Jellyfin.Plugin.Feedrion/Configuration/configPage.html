@@ -28,6 +28,7 @@
                     <button is="emby-button" type="button" id="feedrionSyncNow" class="raised button-alt">
                         <span>Sync now</span>
                     </button>
+                    <div id="feedrionSyncStatus" class="fieldDescription" aria-live="polite"></div>
                 </div>
 
                 <form id="FeedrionConfigForm">
@@ -144,7 +145,21 @@
                 page.addEventListener('pagehide', function () { clearTimeout(timer); });
 
                 page.querySelector('#feedrionSyncNow').addEventListener('click', function () {
-                    call('POST', 'Feedrion/Sync').then(function () { setTimeout(refresh, 15000); });
+                    var button = this;
+                    var status = page.querySelector('#feedrionSyncStatus');
+                    button.disabled = true;
+                    status.textContent = 'Syncing…';
+                    // The server answers once the pass is over, with the links as they now are.
+                    ApiClient.fetch({ type: 'POST', url: ApiClient.getUrl('Feedrion/Sync'), dataType: 'json' })
+                        .then(function (links) {
+                            render(links);
+                            status.textContent = 'Sync finished at ' + new Date().toLocaleTimeString() + '.';
+                        }, function (response) {
+                            var code = response && response.status ? ' (HTTP ' + response.status + ')' : '';
+                            status.textContent = 'Sync failed' + code + '. See the server log.';
+                            refresh();
+                        })
+                        .then(function () { button.disabled = false; });
                 });
 
                 page.querySelector('#FeedrionConfigForm').addEventListener('submit', function (e) {
