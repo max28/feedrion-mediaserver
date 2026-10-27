@@ -46,6 +46,18 @@ namespace Emby.Plugin.Feedrion
         public string LibraryIds { get; set; } = "";
     }
 
+    [Route("/Feedrion/Series", "GET", Summary = "The server's series with a TheTVDB id")]
+    public sealed class GetFeedrionSeries : IReturn<List<MediaSeries>>
+    {
+    }
+
+    /// <summary>The ignored series, as one comma-separated string of TheTVDB ids.</summary>
+    [Route("/Feedrion/IgnoredSeries", "POST", Summary = "Replace the ignored series")]
+    public sealed class SetFeedrionIgnoredSeries : IReturn<int[]>
+    {
+        public string TvdbIds { get; set; } = "";
+    }
+
     [Route("/Feedrion/Sync", "POST", Summary = "Run a sync pass now and return the links")]
     public sealed class SyncFeedrion : IReturn<List<LinkView>>
     {
@@ -98,6 +110,22 @@ namespace Emby.Plugin.Feedrion
         }
 
         public object Get(GetFeedrionLibraries request) => Entry.Engine.ListLibraries().ToList();
+
+        public object Get(GetFeedrionSeries request) => Entry.Engine.ListSeries().ToList();
+
+        public object Post(SetFeedrionIgnoredSeries request)
+        {
+            var plugin = Plugin.Instance ?? throw new InvalidOperationException("Feedrion plugin not loaded.");
+            var engine = Entry.Engine;
+            plugin.Configuration.IgnoredTvdbSeriesIds = (request.TvdbIds ?? "")
+                .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(raw => int.TryParse(raw.Trim(), System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture, out var id) ? id : 0)
+                .Where(id => id > 0).Distinct().OrderBy(id => id).ToArray();
+            plugin.SaveConfiguration();
+            engine.IgnoredSeriesChanged();
+            return plugin.Configuration.IgnoredTvdbSeriesIds;
+        }
 
         public object Post(UpdateFeedrionLinkSettings request)
         {

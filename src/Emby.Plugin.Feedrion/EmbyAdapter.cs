@@ -162,6 +162,15 @@ namespace Emby.Plugin.Feedrion
             return _library.GetItemList(query);
         }
 
+        public IReadOnlyList<MediaSeries> ListSeries() => _library.GetItemList(
+                new InternalItemsQuery { IncludeItemTypes = new[] { nameof(Series) }, Recursive = true })
+            .Select(i => (Item: i, Id: ParseId(i.GetProviderId(MetadataProviders.Tvdb))))
+            .Where(x => x.Id != null)
+            .GroupBy(x => x.Id!.Value)
+            .Select(g => new MediaSeries { TvdbId = g.Key, Name = g.First().Item.Name ?? "", Year = g.First().Item.ProductionYear })
+            .OrderBy(x => x.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+
         public IReadOnlyList<LibraryItem> ListLibraryEpisodes()
         {
             var scan = new Dictionary<long, string[]>();

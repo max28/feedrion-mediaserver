@@ -92,7 +92,10 @@ namespace Emby.Plugin.Feedrion
                         new LinkStore(Path.Combine(plugin.DataFolderPath, "links")),
                         _http,
                         () => plugin.Configuration.ApiBaseUrl,
-                        (message, error) => _logger.ErrorException(message, error ?? new Exception(message)));
+                        (message, error) => _logger.ErrorException(message, error ?? new Exception(message)))
+                    {
+                        IgnoredSeries = () => plugin.Configuration.IgnoredTvdbSeriesIds ?? Array.Empty<int>(),
+                    };
                     _sessions.PlaybackStopped += OnPlaybackStopped;
                     _userData.UserDataSaved += OnUserDataSaved;
                     _library.ItemAdded += OnItemAdded;

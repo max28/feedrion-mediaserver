@@ -337,5 +337,35 @@ namespace Feedrion.MediaServer.Core.Tests
             Assert.Null(reread.LibraryIds);
             Assert.False(reread.AddNewShows);
         }
+    
+        [Fact]
+        public async Task An_ignored_series_never_reaches_feedrion()
+        {
+            var (engine, store) = Engine();
+            var ignored = new System.Collections.Generic.List<int>();
+            engine.IgnoredSeries = () => ignored;
+            // Queued before the series was ignored.
+            engine.RecordPlayedToggle(UserId, new EpisodeRef { TvdbSeriesId = 600, TvdbEpisodeId = 1001 }, played: true);
+            ignored.Add(600);
+            engine.RecordPlayback(UserId, new EpisodeRef { TvdbSeriesId = 600, TvdbEpisodeId = 1002 }, 100, true);
+            engine.RecordPlayedToggle(UserId, Ep(1003), played: true);
+            _adapter.History.Add(new WatchEvent { TvdbSeriesId = 600, TvdbEpisodeId = 1004 });
+            _adapter.Library.Add(new LibraryItem { TvdbSeriesId = 600, TvdbEpisodeId = 1005, ItemId = "k" });
+            _adapter.Library.Add(new LibraryItem { TvdbSeriesId = 500, TvdbEpisodeId = 1006, ItemId = "n" });
+            _api.Watches.Add(new RemoteWatch { TvdbSeriesId = 600, TvdbEpisodeId = 1007, Season = 1, Episode = 7, WatchedAt = DateTimeOffset.UtcNow });
+            await engine.RunOnceAsync(CancellationToken.None);
+
+            Assert.Equal(new int?[] { 1003 }, _api.EventBatches.Single().Select(e => e.TvdbEpisodeId).ToArray());
+            Assert.Equal(new[] { 1006 }, _api.LibraryBatches.Single().Items.Select(i => i.TvdbEpisodeId).ToArray());
+            Assert.Empty(_adapter.Marked);
+            Assert.Empty(store.Get(UserId)!.PendingEvents);
+
+            engine.RecordLibraryChange(new[] { new LibraryItem { TvdbSeriesId = 600, TvdbEpisodeId = 1008, ItemId = "z" } }, new int[0]);
+            Assert.Empty(store.Get(UserId)!.PendingLibraryAdded);
+
+            // Changing the list sends the inventory again.
+            engine.IgnoredSeriesChanged();
+            Assert.Null(store.Get(UserId)!.LibraryFullAt);
+        }
     }
 }

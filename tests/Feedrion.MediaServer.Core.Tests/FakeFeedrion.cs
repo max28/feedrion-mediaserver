@@ -106,6 +106,7 @@ namespace Feedrion.MediaServer.Core.Tests
 
         public ServerInfo DescribeServer() => new ServerInfo { ServerId = "srv", ServerName = "Salon", ClientVersion = "test" };
         public IReadOnlyList<MediaLibrary> ListLibraries() => Libraries;
+        public IReadOnlyList<MediaSeries> ListSeries() => new[] { new MediaSeries { TvdbId = 500, Name = "Northwind" } };
         public IReadOnlyList<LibraryItem> ListLibraryEpisodes() => Library;
         public IReadOnlyList<WatchEvent> ListPlayedEpisodes(string serverUserId) => History;
 

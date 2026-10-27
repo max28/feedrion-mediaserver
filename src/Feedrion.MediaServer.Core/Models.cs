@@ -112,6 +112,15 @@ namespace Feedrion.MediaServer.Core
         [JsonPropertyName("type")] public string? Type { get; set; }
     }
 
+    /// <summary>One series of the server, for the « ignored series » list. Its
+    /// name never leaves the server.</summary>
+    public sealed class MediaSeries
+    {
+        [JsonPropertyName("tvdbId")] public int TvdbId { get; set; }
+        [JsonPropertyName("name")] public string Name { get; set; } = "";
+        [JsonPropertyName("year")] public int? Year { get; set; }
+    }
+
     /// <summary>What the configuration page sets on one server user's link.</summary>
     public sealed class LinkSettings
     {

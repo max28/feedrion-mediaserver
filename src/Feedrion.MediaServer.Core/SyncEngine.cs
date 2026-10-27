@@ -36,6 +36,9 @@ namespace Feedrion.MediaServer.Core
         /// <summary>The server's libraries, for the configuration page.</summary>
         IReadOnlyList<MediaLibrary> ListLibraries();
 
+        /// <summary>Every series the server holds that carries a TheTVDB id.</summary>
+        IReadOnlyList<MediaSeries> ListSeries();
+
         /// <summary>Every episode the server holds that carries TheTVDB ids,
         /// with the libraries it sits in.</summary>
         IReadOnlyList<LibraryItem> ListLibraryEpisodes();
@@ -92,6 +95,30 @@ namespace Feedrion.MediaServer.Core
         }
 
         public Func<DateTimeOffset> Clock { get; set; } = () => DateTimeOffset.UtcNow;
+
+        /// <summary>The series nothing is ever sent about, for any user — the
+        /// server-wide « ignored series » list (TheTVDB ids).</summary>
+        public Func<IReadOnlyCollection<int>> IgnoredSeries { get; set; } = () => Array.Empty<int>();
+
+        private bool IsIgnored(int tvdbSeriesId) => IgnoredSeries().Contains(tvdbSeriesId);
+
+        /// <summary>The list changed: what is still queued about a newly ignored
+        /// series is dropped at the next flush, and the inventory is sent again
+        /// so Feedrion stops calling it « available ».</summary>
+        public void IgnoredSeriesChanged()
+        {
+            lock (_gate)
+            {
+                foreach (var state in _store.All().Where(s => s.IsLinked))
+                {
+                    state.LibraryFullAt = null;
+                    _store.Save(state);
+                }
+            }
+            Wake();
+        }
+
+        public IReadOnlyList<MediaSeries> ListSeries() => _adapter.ListSeries();
 
         public IReadOnlyList<LinkState> Links => _store.All();
 
@@ -192,7 +219,7 @@ namespace Feedrion.MediaServer.Core
         {
             var state = _store.Get(serverUserId);
             if (state == null || !state.IsLinked || IsEcho(serverUserId, episode.Key)) return;
-            if (!state.Covers(episode.LibraryIds)) return;
+            if (!state.Covers(episode.LibraryIds) || IsIgnored(episode.TvdbSeriesId)) return;
             if (!Scrobble.CountsAsWatched(percent, playedToCompletion, state.ScrobblePercent)) return;
             Enqueue(state, Event(WatchEvent.Watched, episode, playedToCompletion ? (double?)null : percent));
         }
@@ -202,6 +229,7 @@ namespace Feedrion.MediaServer.Core
         {
             var state = _store.Get(serverUserId);
             if (state == null || !state.IsLinked || !state.Covers(episode.LibraryIds)) return;
+            if (IsIgnored(episode.TvdbSeriesId)) return;
             if (played && IsEcho(serverUserId, episode.Key)) return;
             Enqueue(state, Event(played ? WatchEvent.Watched : WatchEvent.Unwatched, episode, null));
         }
@@ -216,7 +244,7 @@ namespace Feedrion.MediaServer.Core
             {
                 foreach (var state in _store.All().Where(s => s.IsLinked))
                 {
-                    var mine = added.Where(a => state.Covers(a.LibraryIds)).ToList();
+                    var mine = added.Where(a => state.Covers(a.LibraryIds) && !IsIgnored(a.TvdbSeriesId)).ToList();
                     if (mine.Count == 0 && removed.Count == 0) continue;
                     state.EnqueueLibrary(mine, removed);
                     _store.Save(state);
@@ -404,7 +432,7 @@ namespace Feedrion.MediaServer.Core
                 // The history the server already holds, once per link; the
                 // events played since come after it in the queue.
                 var history = _adapter.ListPlayedEpisodes(state.ServerUserId)
-                    .Where(e => state.Covers(e.LibraryIds)).ToList();
+                    .Where(e => state.Covers(e.LibraryIds) && !IsIgnored(e.TvdbSeriesId)).ToList();
                 lock (_gate)
                 {
                     var later = state.PendingEvents.ToList();
@@ -426,7 +454,14 @@ namespace Feedrion.MediaServer.Core
             while (true)
             {
                 List<WatchEvent> batch;
-                lock (_gate) batch = state.PendingEvents.Take(EventsPerCall).ToList();
+                var ignored = IgnoredSeries();
+                lock (_gate)
+                {
+                    // Queued before its series was ignored: never sent.
+                    if (ignored.Count > 0 && state.PendingEvents.RemoveAll(e => ignored.Contains(e.TvdbSeriesId)) > 0)
+                        _store.Save(state);
+                    batch = state.PendingEvents.Take(EventsPerCall).ToList();
+                }
                 if (batch.Count == 0) return;
                 await client.PostEventsAsync(batch, state.AddNewShows, ct).ConfigureAwait(false);
                 lock (_gate)
@@ -443,7 +478,8 @@ namespace Feedrion.MediaServer.Core
             var due = state.LibraryFullAt == null || Clock() - state.LibraryFullAt.Value > LibraryResendEvery;
             if (due)
             {
-                var items = _adapter.ListLibraryEpisodes().Where(i => state.Covers(i.LibraryIds)).ToList();
+                var items = _adapter.ListLibraryEpisodes()
+                    .Where(i => state.Covers(i.LibraryIds) && !IsIgnored(i.TvdbSeriesId)).ToList();
                 var generation = Clock().ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture);
                 var pages = items.Count == 0 ? 1 : (items.Count + LibraryPerCall - 1) / LibraryPerCall;
                 for (var page = 0; page < pages; page++)
@@ -470,6 +506,7 @@ namespace Feedrion.MediaServer.Core
                 List<int> removed;
                 lock (_gate)
                 {
+                    state.PendingLibraryAdded.RemoveAll(a => IsIgnored(a.TvdbSeriesId));
                     added = state.PendingLibraryAdded.Take(LibraryPerCall).ToList();
                     removed = state.PendingLibraryRemoved.Take(LibraryPerCall).ToList();
                 }
@@ -491,6 +528,7 @@ namespace Feedrion.MediaServer.Core
                 var watches = await client.GetWatchedAsync(state.WatchCursor, WatchesPerCall, ct).ConfigureAwait(false);
                 foreach (var watch in watches.Watches)
                 {
+                    if (IsIgnored(watch.TvdbSeriesId)) continue;
                     var key = "e" + watch.TvdbEpisodeId;
                     // Before the server is touched: its own event comes back
                     // from inside MarkPlayed on some servers.

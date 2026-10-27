@@ -37,6 +37,14 @@ message and comment as if it already were.
   everything: history import, live events, inventory, and the reverse
   `MarkPlayed`. With a choice made, an episode whose library is unknown is
   left out. A change resets `ImportDone` and `LibraryFullAt`.
+- **Ignored series are server-wide** (`PluginConfiguration.IgnoredTvdbSeriesIds`,
+  read through `SyncEngine.IgnoredSeries`): filtered at every exit — live
+  events, history import, flush of what was queued before, inventory and
+  library changes, and the reverse `MarkPlayed`. A change resets every link's
+  `LibraryFullAt`.
+- **The page reads Options ▸ Users ▸ Ignored series ▸ Server**, in both
+  plugins. The Jellyfin page and the Emby script share their logic line for
+  line; change both.
 - **The threshold belongs to the reader**, read from
   `GET /integrations/v1/mediaserver/config`; the server's own "played to
   completion" always counts.

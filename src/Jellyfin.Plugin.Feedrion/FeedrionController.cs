@@ -70,6 +70,23 @@ namespace Jellyfin.Plugin.Feedrion
         [HttpGet("Libraries")]
         public ActionResult<IEnumerable<MediaLibrary>> GetLibraries() => _engine.ListLibraries().ToList();
 
+        /// <summary>The server's series with a TheTVDB id, for the ignored list.</summary>
+        [HttpGet("Series")]
+        public ActionResult<IEnumerable<MediaSeries>> GetSeries() => _engine.ListSeries().ToList();
+
+        /// <summary>Replace the server-wide « ignored series » list.</summary>
+        [HttpPost("IgnoredSeries")]
+        public ActionResult<IEnumerable<int>> SetIgnoredSeries([FromBody] List<int> tvdbIds)
+        {
+            var plugin = Plugin.Instance;
+            if (plugin == null) return NotFound();
+            plugin.Configuration.IgnoredTvdbSeriesIds = (tvdbIds ?? new List<int>())
+                .Where(id => id > 0).Distinct().OrderBy(id => id).ToArray();
+            plugin.SaveConfiguration();
+            _engine.IgnoredSeriesChanged();
+            return plugin.Configuration.IgnoredTvdbSeriesIds;
+        }
+
         /// <summary>What a server user's link sends: which libraries, and
         /// whether a series not followed yet in Feedrion gets added.</summary>
         [HttpPost("Links/{userId}/Settings")]
