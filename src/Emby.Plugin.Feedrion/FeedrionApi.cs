@@ -4,7 +4,11 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Feedrion.MediaServer.Core;
+using MediaBrowser.Controller;
+using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Net;
+using MediaBrowser.Controller.Session;
+using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Services;
 
 namespace Emby.Plugin.Feedrion
@@ -39,12 +43,31 @@ namespace Emby.Plugin.Feedrion
         // Long enough for a first pass over a big library; the page waits for it.
         private static readonly TimeSpan SyncNowTimeout = TimeSpan.FromMinutes(2);
 
-        private static FeedrionEntryPoint Entry =>
-            FeedrionEntryPoint.Instance ?? throw new InvalidOperationException("Feedrion is not running.");
+        private readonly ISessionManager _sessions;
+        private readonly IUserDataManager _userData;
+        private readonly ILibraryManager _library;
+        private readonly IUserManager _users;
+        private readonly IServerApplicationHost _host;
+        private readonly ILogManager _logs;
+
+        public FeedrionApi(
+            ISessionManager sessions, IUserDataManager userData, ILibraryManager library,
+            IUserManager users, IServerApplicationHost host, ILogManager logs)
+        {
+            _sessions = sessions;
+            _userData = userData;
+            _library = library;
+            _users = users;
+            _host = host;
+            _logs = logs;
+        }
+
+        private FeedrionEntryPoint Entry =>
+            FeedrionEntryPoint.Ensure(_sessions, _userData, _library, _users, _host, _logs);
 
         public object Get(GetFeedrionLinks request) => ListLinks();
 
-        private static List<LinkView> ListLinks()
+        private List<LinkView> ListLinks()
         {
             var links = Entry.Engine.Links.ToDictionary(l => l.ServerUserId, StringComparer.OrdinalIgnoreCase);
             return Entry.Users.GetUserList(new MediaBrowser.Model.Querying.UserQuery { IsDisabled = false })

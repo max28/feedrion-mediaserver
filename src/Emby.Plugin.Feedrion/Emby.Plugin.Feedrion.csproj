@@ -17,5 +17,6 @@
     <Compile Include="..\Feedrion.MediaServer.Core\*.cs" LinkBase="Core" />
     <EmbeddedResource Include="Configuration\configPage.html" />
     <EmbeddedResource Include="Configuration\configPage.js" />
+    <EmbeddedResource Include="..\..\assets\thumb.png" LogicalName="Emby.Plugin.Feedrion.thumb.png" />
   </ItemGroup>
 </Project>

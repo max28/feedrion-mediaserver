@@ -8,6 +8,7 @@
 Writes:
   feedrion-jellyfin-<v>.zip   the plugin DLL (Jellyfin's plugin layout)
   feedrion-emby-<v>.zip       the plugin DLL (copy into Emby's plugins folder)
+  feedrion-thumb.png          the catalogue picture the manifest names (imageUrl)
   manifest.json               a Jellyfin plugin repository listing this version
   SHA256SUMS
 
@@ -23,6 +24,7 @@ import hashlib
 import json
 import pathlib
 import re
+import shutil
 import zipfile
 
 JELLYFIN_GUID = "5f0c2a8e-6b1d-4c7e-9a3f-2d8e1b4c6a90"
@@ -78,6 +80,10 @@ def main() -> None:
     emby_zip = a.out / f"feedrion-emby-{a.version}.zip"
     _zip(jf_zip, [jf_dll])
     _zip(emby_zip, [emby_dll])
+    # Jellyfin's catalogue shows the picture its manifest names; it ships with
+    # the release so it never depends on a branch.
+    thumb = a.out / "feedrion-thumb.png"
+    shutil.copyfile(root / "assets/thumb.png", thumb)
 
     abi = _jellyfin_abi(root / "src/Jellyfin.Plugin.Feedrion/Jellyfin.Plugin.Feedrion.csproj")
     manifest = [{
@@ -90,6 +96,7 @@ def main() -> None:
         ),
         "owner": "Feedrion",
         "category": "General",
+        "imageUrl": f"{a.repo_url}/releases/download/v{a.version}/{thumb.name}",
         "versions": [{
             "version": a.version + ".0",
             "changelog": a.changelog or ("Release " + a.version),
