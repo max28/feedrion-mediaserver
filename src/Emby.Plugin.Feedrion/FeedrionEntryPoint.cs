@@ -23,6 +23,8 @@ namespace Emby.Plugin.Feedrion
         private static readonly TimeSpan LibraryFlushEvery = TimeSpan.FromSeconds(30);
         private static readonly TimeSpan Debounce = TimeSpan.FromSeconds(10);
 
+        private static readonly object StartGate = new object();
+
         private readonly ISessionManager _sessions;
         private readonly IUserDataManager _userData;
         private readonly ILibraryManager _library;
@@ -30,8 +32,11 @@ namespace Emby.Plugin.Feedrion
         private readonly CancellationTokenSource _stop = new CancellationTokenSource();
         private readonly ConcurrentDictionary<int, LibraryItem> _added = new ConcurrentDictionary<int, LibraryItem>();
         private readonly ConcurrentDictionary<int, byte> _removed = new ConcurrentDictionary<int, byte>();
-        private readonly HttpClient _http;
+        private HttpClient? _http;
+        private bool _hooked;
 
+        // Takes its dependencies and nothing else: a constructor that throws is
+        // dropped by Emby without a word, and the plugin then never starts.
         public FeedrionEntryPoint(
             ISessionManager sessions, IUserDataManager userData, ILibraryManager library,
             IUserManager users, IServerApplicationHost host, ILogManager logs)
@@ -42,46 +47,85 @@ namespace Emby.Plugin.Feedrion
             _logger = logs.GetLogger("Feedrion");
             Users = users;
             Host = host;
-            _http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
-            _http.DefaultRequestHeaders.UserAgent.ParseAdd(
-                "Feedrion-Emby/" + typeof(Plugin).Assembly.GetName().Version?.ToString(3));
-            var plugin = Plugin.Instance ?? throw new InvalidOperationException("Feedrion plugin not loaded.");
-            Adapter = new EmbyAdapter(library, users, userData, host);
-            Engine = new SyncEngine(
-                Adapter,
-                new LinkStore(Path.Combine(plugin.DataFolderPath, "links")),
-                _http,
-                () => plugin.Configuration.ApiBaseUrl,
-                (message, error) => _logger.ErrorException(message, error ?? new Exception(message)));
-            Instance = this;
         }
 
         /// <summary>The running instance, for the REST service (Emby resolves
         /// services and entry points separately).</summary>
         public static FeedrionEntryPoint? Instance { get; private set; }
 
-        public SyncEngine Engine { get; }
-        public EmbyAdapter Adapter { get; }
+        /// <summary>Why the last start failed, for the configuration page.</summary>
+        public static string? StartupError { get; private set; }
+
+        public SyncEngine Engine { get; private set; } = null!;
+        public EmbyAdapter Adapter { get; private set; } = null!;
         public IUserManager Users { get; }
         public IServerApplicationHost Host { get; }
 
+        /// <summary>The running instance, started here if Emby never ran its
+        /// entry point — the plugin must not depend on that alone (seen on
+        /// Emby 4.11: the page answered, the engine did not exist).</summary>
+        public static FeedrionEntryPoint Ensure(
+            ISessionManager sessions, IUserDataManager userData, ILibraryManager library,
+            IUserManager users, IServerApplicationHost host, ILogManager logs)
+        {
+            var running = Instance;
+            if (running != null) return running;
+            new FeedrionEntryPoint(sessions, userData, library, users, host, logs).Run();
+            return Instance ?? throw new InvalidOperationException(
+                "Feedrion could not start: " + (StartupError ?? "unknown error") + ".");
+        }
+
         public void Run()
         {
-            _sessions.PlaybackStopped += OnPlaybackStopped;
-            _userData.UserDataSaved += OnUserDataSaved;
-            _library.ItemAdded += OnItemAdded;
-            _library.ItemRemoved += OnItemRemoved;
+            lock (StartGate)
+            {
+                if (Instance != null) return;
+                try
+                {
+                    var plugin = Plugin.Instance ?? throw new InvalidOperationException("Feedrion plugin not loaded.");
+                    _http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
+                    _http.DefaultRequestHeaders.UserAgent.ParseAdd(
+                        "Feedrion-Emby/" + typeof(Plugin).Assembly.GetName().Version?.ToString(3));
+                    Adapter = new EmbyAdapter(_library, Users, _userData, Host);
+                    Engine = new SyncEngine(
+                        Adapter,
+                        new LinkStore(Path.Combine(plugin.DataFolderPath, "links")),
+                        _http,
+                        () => plugin.Configuration.ApiBaseUrl,
+                        (message, error) => _logger.ErrorException(message, error ?? new Exception(message)));
+                    _sessions.PlaybackStopped += OnPlaybackStopped;
+                    _userData.UserDataSaved += OnUserDataSaved;
+                    _library.ItemAdded += OnItemAdded;
+                    _library.ItemRemoved += OnItemRemoved;
+                    _hooked = true;
+                    Instance = this;
+                    StartupError = null;
+                    _logger.Info("Feedrion: started");
+                }
+                catch (Exception e)
+                {
+                    StartupError = e.GetType().Name + ": " + e.Message;
+                    _logger.ErrorException("Feedrion: could not start", e);
+                    _http?.Dispose();
+                    return;
+                }
+            }
             _ = Task.Run(() => LoopAsync(_stop.Token));
         }
 
         public void Dispose()
         {
-            _sessions.PlaybackStopped -= OnPlaybackStopped;
-            _userData.UserDataSaved -= OnUserDataSaved;
-            _library.ItemAdded -= OnItemAdded;
-            _library.ItemRemoved -= OnItemRemoved;
+            if (_hooked)
+            {
+                _sessions.PlaybackStopped -= OnPlaybackStopped;
+                _userData.UserDataSaved -= OnUserDataSaved;
+                _library.ItemAdded -= OnItemAdded;
+                _library.ItemRemoved -= OnItemRemoved;
+                _hooked = false;
+            }
+            if (Instance == this) Instance = null;
             _stop.Cancel();
-            _http.Dispose();
+            _http?.Dispose();
         }
 
         private async Task LoopAsync(CancellationToken ct)
