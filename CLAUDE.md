@@ -40,6 +40,10 @@ message and comment as if it already were.
 - **A 401 after one refresh means revoked**: forget the tokens, keep the link
   row so the admin page can say so.
 - **https only** for the API address; plain http is refused.
+- **Emby runs on .NET 8**: the Emby plugin compiles against System.Text.Json
+  8.x and never higher (a 10.x build asked Emby 4.11 for an assembly it does
+  not have, and the plugin never started). `scripts/package.py` refuses it;
+  dependabot ignores its majors.
 - The API contract lives in the Feedrion API (`/integrations/v1/*`). Changes
   there are additive; this client must tolerate unknown fields.
 

@@ -9,8 +9,11 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="MediaBrowser.Server.Core" Version="4.9.1.90" ExcludeAssets="runtime" />
-    <!-- Emby's runtime carries it; compile against it only. -->
-    <PackageReference Include="System.Text.Json" Version="10.0.14" PrivateAssets="all" ExcludeAssets="runtime" />
+    <!-- Emby's runtime carries it; compile against it only. Emby runs on .NET 8, so
+         the version compiled against must not exceed 8.x: built against 10.x, the
+         plugin asked Emby 4.11 for System.Text.Json 10.0.0.0 and never started.
+         scripts/package.py refuses a higher major, and dependabot is told so. -->
+    <PackageReference Include="System.Text.Json" Version="8.0.5" PrivateAssets="all" ExcludeAssets="runtime" />
     <PackageReference Include="System.Memory" Version="4.6.3" PrivateAssets="all" ExcludeAssets="runtime" />
   </ItemGroup>
   <ItemGroup>
