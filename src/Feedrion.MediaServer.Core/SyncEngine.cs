@@ -247,17 +247,34 @@ namespace Feedrion.MediaServer.Core
             }
         }
 
-        /// <summary>Ask for a pass now (« Synchroniser maintenant »).</summary>
-        public void RequestSync() => Wake();
-
         /// <summary>Wait until something was queued, or [max] passed.</summary>
         public Task<bool> WaitForWorkAsync(TimeSpan max, CancellationToken ct) => _wake.WaitAsync(max, ct);
 
         // ── The pass ──────────────────────────────────────────────────────────
 
-        public async Task RunOnceAsync(CancellationToken ct)
+        public Task RunOnceAsync(CancellationToken ct) => RunPassAsync(waitForRunning: false, ct);
+
+        /// <summary>« Sync now »: a pass right away, awaited, that also sends the
+        /// whole library again. A pass already running is waited for rather
+        /// than skipped, so the caller sees the result of a pass that started
+        /// after the click.</summary>
+        public async Task SyncNowAsync(CancellationToken ct)
         {
-            if (!await _running.WaitAsync(0, ct).ConfigureAwait(false)) return;
+            lock (_gate)
+            {
+                foreach (var state in _store.All().Where(s => s.IsLinked))
+                {
+                    state.LibraryFullAt = null;
+                    _store.Save(state);
+                }
+            }
+            await RunPassAsync(waitForRunning: true, ct).ConfigureAwait(false);
+        }
+
+        private async Task RunPassAsync(bool waitForRunning, CancellationToken ct)
+        {
+            if (waitForRunning) await _running.WaitAsync(ct).ConfigureAwait(false);
+            else if (!await _running.WaitAsync(0, ct).ConfigureAwait(false)) return;
             try
             {
                 foreach (var state in _store.All())

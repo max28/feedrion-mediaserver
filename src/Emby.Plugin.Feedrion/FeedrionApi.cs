@@ -26,8 +26,8 @@ namespace Emby.Plugin.Feedrion
         public string UserId { get; set; } = "";
     }
 
-    [Route("/Feedrion/Sync", "POST", Summary = "Run a sync pass now")]
-    public sealed class SyncFeedrion : IReturnVoid
+    [Route("/Feedrion/Sync", "POST", Summary = "Run a sync pass now and return the links")]
+    public sealed class SyncFeedrion : IReturn<List<LinkView>>
     {
     }
 
@@ -36,10 +36,15 @@ namespace Emby.Plugin.Feedrion
     [Authenticated(Roles = "Admin")]
     public sealed class FeedrionApi : IService
     {
+        // Long enough for a first pass over a big library; the page waits for it.
+        private static readonly TimeSpan SyncNowTimeout = TimeSpan.FromMinutes(2);
+
         private static FeedrionEntryPoint Entry =>
             FeedrionEntryPoint.Instance ?? throw new InvalidOperationException("Feedrion is not running.");
 
-        public object Get(GetFeedrionLinks request)
+        public object Get(GetFeedrionLinks request) => ListLinks();
+
+        private static List<LinkView> ListLinks()
         {
             var links = Entry.Engine.Links.ToDictionary(l => l.ServerUserId, StringComparer.OrdinalIgnoreCase);
             return Entry.Users.GetUserList(new MediaBrowser.Model.Querying.UserQuery { IsDisabled = false })
@@ -68,6 +73,13 @@ namespace Emby.Plugin.Feedrion
             await Entry.Engine.UnlinkAsync(request.UserId, CancellationToken.None).ConfigureAwait(false);
         }
 
-        public void Post(SyncFeedrion request) => Entry.Engine.RequestSync();
+        public async Task<object> Post(SyncFeedrion request)
+        {
+            using (var timeout = new CancellationTokenSource(SyncNowTimeout))
+            {
+                await Entry.Engine.SyncNowAsync(timeout.Token).ConfigureAwait(false);
+            }
+            return ListLinks();
+        }
     }
 }

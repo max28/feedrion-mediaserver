@@ -74,11 +74,15 @@ namespace Jellyfin.Plugin.Feedrion
             return NoContent();
         }
 
+        /// <summary>Runs a pass now and answers once it is over, with the links
+        /// as they now are — the page has something to show.</summary>
         [HttpPost("Sync")]
-        public ActionResult Sync()
+        public async Task<ActionResult<IEnumerable<LinkView>>> Sync(CancellationToken ct)
         {
-            _engine.RequestSync();
-            return NoContent();
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromMinutes(2));
+            await _engine.SyncNowAsync(timeout.Token).ConfigureAwait(false);
+            return GetLinks();
         }
     }
 }

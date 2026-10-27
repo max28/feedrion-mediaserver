@@ -95,7 +95,21 @@ define(['loading', 'emby-input', 'emby-button'], function (loading) {
         view.addEventListener('viewhide', function () { clearTimeout(timer); });
 
         view.querySelector('.feedrionSyncNow').addEventListener('click', function () {
-            call('POST', 'Feedrion/Sync').then(function () { setTimeout(refresh, 15000); });
+            var button = this;
+            var status = view.querySelector('.feedrionSyncStatus');
+            button.disabled = true;
+            status.textContent = 'Syncing…';
+            // The server answers once the pass is over, with the links as they now are.
+            ApiClient.ajax({ type: 'POST', url: ApiClient.getUrl('Feedrion/Sync'), dataType: 'json' })
+                .then(function (links) {
+                    render(links);
+                    status.textContent = 'Sync finished at ' + new Date().toLocaleTimeString() + '.';
+                }, function (response) {
+                    var code = response && response.status ? ' (HTTP ' + response.status + ')' : '';
+                    status.textContent = 'Sync failed' + code + '. See the server log.';
+                    refresh();
+                })
+                .then(function () { button.disabled = false; });
         });
 
         view.querySelector('.feedrionConfigForm').addEventListener('submit', function (e) {
