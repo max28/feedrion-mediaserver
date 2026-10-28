@@ -19,6 +19,10 @@ namespace Feedrion.MediaServer.Core
         /// <summary>The libraries the episode sits in; null when unknown.</summary>
         public IReadOnlyList<string>? LibraryIds { get; set; }
 
+        /// <summary>The server's own names, for the local activity log only.</summary>
+        public string? SeriesName { get; set; }
+        public string? EpisodeName { get; set; }
+
         public string Key => TvdbEpisodeId.HasValue
             ? "e" + TvdbEpisodeId.Value
             : "s" + TvdbSeriesId + ":" + Season + ":" + Number;
@@ -46,10 +50,14 @@ namespace Feedrion.MediaServer.Core
         /// <summary>Every episode [serverUserId] has played — the initial import.</summary>
         IReadOnlyList<WatchEvent> ListPlayedEpisodes(string serverUserId);
 
-        /// <summary>Mark an episode played for [serverUserId]; false when the
-        /// server does not hold it in a library [covers] accepts, or it is
-        /// already played.</summary>
-        bool MarkPlayed(string serverUserId, RemoteWatch watch, Func<IReadOnlyList<string>?, bool> covers);
+        /// <summary>Mark an episode played for [serverUserId], and return it;
+        /// null when the server does not hold it in a library [covers]
+        /// accepts, or it is already played.</summary>
+        LibraryItem? MarkPlayed(string serverUserId, RemoteWatch watch, Func<IReadOnlyList<string>?, bool> covers);
+
+        /// <summary>An episode as the last library listing knew it — names
+        /// included — without listing the library again; null if unknown.</summary>
+        LibraryItem? Find(int tvdbSeriesId, int? tvdbEpisodeId, int? season, int? number);
     }
 
     public sealed class PendingLink
@@ -80,6 +88,10 @@ namespace Feedrion.MediaServer.Core
         private readonly object _gate = new object();
         private readonly ConcurrentDictionary<string, PendingLink> _pending = new ConcurrentDictionary<string, PendingLink>();
         private readonly ConcurrentDictionary<string, DateTimeOffset> _echoes = new ConcurrentDictionary<string, DateTimeOffset>();
+        // Names of what is queued, keyed by user and episode, for the activity
+        // log: the queue itself never carries a name (it is what is sent).
+        private readonly ConcurrentDictionary<string, EpisodeRef> _labels = new ConcurrentDictionary<string, EpisodeRef>();
+        private readonly ActivityLog _activity;
         private readonly SemaphoreSlim _wake = new SemaphoreSlim(0, 1);
         private readonly SemaphoreSlim _running = new SemaphoreSlim(1, 1);
 
@@ -92,7 +104,11 @@ namespace Feedrion.MediaServer.Core
             _http = http;
             _apiBaseUrl = apiBaseUrl;
             _log = log;
+            _activity = new ActivityLog(System.IO.Path.Combine(store.DirectoryPath, "activity.json"));
         }
+
+        /// <summary>The last changes exchanged with Feedrion, newest first.</summary>
+        public IReadOnlyList<ActivityEntry> Activity() => _activity.Latest();
 
         public Func<DateTimeOffset> Clock { get; set; } = () => DateTimeOffset.UtcNow;
 
@@ -230,6 +246,7 @@ namespace Feedrion.MediaServer.Core
             var state = _store.Get(serverUserId);
             if (state == null || !state.IsLinked || !state.Covers(episode.LibraryIds)) return;
             if (IsIgnored(episode.TvdbSeriesId)) return;
+            if (!played && state.NeverUnwatch) return;
             if (played && IsEcho(serverUserId, episode.Key)) return;
             Enqueue(state, Event(played ? WatchEvent.Watched : WatchEvent.Unwatched, episode, null));
         }
@@ -275,6 +292,8 @@ namespace Feedrion.MediaServer.Core
                     || !SameLibraries(state.LibraryIds, libraries);
                 state.AddNewShows = settings.AddNewShows;
                 state.LibraryIds = libraries;
+                // Not a reason to send anything again: it only filters what comes.
+                state.NeverUnwatch = settings.NeverUnwatch;
                 if (changed)
                 {
                     state.ImportDone = false;
@@ -298,6 +317,10 @@ namespace Feedrion.MediaServer.Core
 
         private WatchEvent Event(string type, EpisodeRef ep, double? percent) => new WatchEvent
         {
+            SeriesName = ep.SeriesName,
+            EpisodeName = ep.EpisodeName,
+            LocalSeason = ep.Season,
+            LocalNumber = ep.Number,
             Type = type,
             TvdbSeriesId = ep.TvdbSeriesId,
             TvdbEpisodeId = ep.TvdbEpisodeId,
@@ -307,8 +330,43 @@ namespace Feedrion.MediaServer.Core
             Percent = percent.HasValue ? Math.Round(percent.Value, 1) : (double?)null,
         };
 
+        private void Remember(LinkState state, WatchEvent e)
+        {
+            if (e.SeriesName == null) return;
+            _labels[state.ServerUserId + "|" + e.EpisodeKey] = new EpisodeRef
+            {
+                TvdbSeriesId = e.TvdbSeriesId, TvdbEpisodeId = e.TvdbEpisodeId,
+                Season = e.LocalSeason ?? e.Season, Number = e.LocalNumber ?? e.Episode,
+                SeriesName = e.SeriesName, EpisodeName = e.EpisodeName,
+            };
+        }
+
+        private ActivityEntry Sent(LinkState state, WatchEvent e)
+        {
+            _labels.TryRemove(state.ServerUserId + "|" + e.EpisodeKey, out var label);
+            LibraryItem? known = null;
+            if (label == null)
+            {
+                try { known = _adapter.Find(e.TvdbSeriesId, e.TvdbEpisodeId, e.Season, e.Episode); }
+                catch (Exception) { known = null; }
+            }
+            return new ActivityEntry
+            {
+                At = Clock(),
+                ToFeedrion = true,
+                Action = e.Type == WatchEvent.Unwatched ? ActivityEntry.Unwatched : ActivityEntry.Watched,
+                UserName = state.ServerUserName,
+                TvdbSeriesId = e.TvdbSeriesId,
+                Series = label?.SeriesName ?? known?.SeriesName,
+                EpisodeName = label?.EpisodeName ?? known?.EpisodeName,
+                Season = label?.Season ?? known?.Season ?? e.Season,
+                Episode = label?.Number ?? known?.Number ?? e.Episode,
+            };
+        }
+
         private void Enqueue(LinkState state, WatchEvent e)
         {
+            Remember(state, e);
             lock (_gate)
             {
                 state.Enqueue(e);
@@ -437,7 +495,11 @@ namespace Feedrion.MediaServer.Core
                 {
                     var later = state.PendingEvents.ToList();
                     state.PendingEvents.Clear();
-                    foreach (var e in history) state.Enqueue(e);
+                    foreach (var e in history)
+                    {
+                        Remember(state, e);
+                        state.Enqueue(e);
+                    }
                     foreach (var e in later) state.Enqueue(e);
                     state.ImportDone = true;
                     _store.Save(state);
@@ -457,13 +519,19 @@ namespace Feedrion.MediaServer.Core
                 var ignored = IgnoredSeries();
                 lock (_gate)
                 {
-                    // Queued before its series was ignored: never sent.
-                    if (ignored.Count > 0 && state.PendingEvents.RemoveAll(e => ignored.Contains(e.TvdbSeriesId)) > 0)
-                        _store.Save(state);
+                    // Queued before its series was ignored, or before « never
+                    // unwatch » was ticked: never sent.
+                    var dropped = state.PendingEvents.RemoveAll(e =>
+                        (ignored.Count > 0 && ignored.Contains(e.TvdbSeriesId))
+                        || (state.NeverUnwatch && e.Type == WatchEvent.Unwatched));
+                    if (dropped > 0) _store.Save(state);
                     batch = state.PendingEvents.Take(EventsPerCall).ToList();
                 }
                 if (batch.Count == 0) return;
                 await client.PostEventsAsync(batch, state.AddNewShows, ct).ConfigureAwait(false);
+                // Every label of the batch is released; the log keeps the last 50.
+                var logged = batch.Select(e => Sent(state, e)).ToList();
+                _activity.Add(logged.Skip(Math.Max(0, logged.Count - ActivityLog.Keep)));
                 lock (_gate)
                 {
                     // Only what was sent, and only if nothing newer replaced it.
@@ -526,6 +594,7 @@ namespace Feedrion.MediaServer.Core
             for (var page = 0; page < WatchPagesPerPass; page++)
             {
                 var watches = await client.GetWatchedAsync(state.WatchCursor, WatchesPerCall, ct).ConfigureAwait(false);
+                var applied = new List<ActivityEntry>();
                 foreach (var watch in watches.Watches)
                 {
                     if (IsIgnored(watch.TvdbSeriesId)) continue;
@@ -536,13 +605,26 @@ namespace Feedrion.MediaServer.Core
                     _echoes[state.ServerUserId + "|s" + watch.TvdbSeriesId + ":" + watch.Season + ":" + watch.Episode] = Clock();
                     try
                     {
-                        _adapter.MarkPlayed(state.ServerUserId, watch, state.Covers);
+                        var marked = _adapter.MarkPlayed(state.ServerUserId, watch, state.Covers);
+                        if (marked != null) applied.Add(new ActivityEntry
+                        {
+                            At = Clock(),
+                            ToFeedrion = false,
+                            Action = ActivityEntry.Watched,
+                            UserName = state.ServerUserName,
+                            TvdbSeriesId = watch.TvdbSeriesId,
+                            Series = marked.SeriesName,
+                            EpisodeName = marked.EpisodeName,
+                            Season = watch.Season,
+                            Episode = watch.Episode,
+                        });
                     }
                     catch (Exception e)
                     {
                         _log("Feedrion: could not mark an episode played", e);
                     }
                 }
+                _activity.Add(applied);
                 lock (_gate)
                 {
                     state.WatchCursor = watches.Cursor;

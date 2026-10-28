@@ -367,5 +367,58 @@ namespace Feedrion.MediaServer.Core.Tests
             engine.IgnoredSeriesChanged();
             Assert.Null(store.Get(UserId)!.LibraryFullAt);
         }
+    
+        [Fact]
+        public async Task The_activity_log_keeps_the_last_fifty_changes_both_ways_with_local_names()
+        {
+            var (engine, store) = Engine();
+            var state = store.Get(UserId)!;
+            state.ServerUserName = "max";
+            store.Save(state);
+            engine.RecordPlayedToggle(UserId, new EpisodeRef
+            {
+                TvdbSeriesId = 500, TvdbEpisodeId = 1201, Season = 2, Number = 3,
+                SeriesName = "Northwind", EpisodeName = "The Harbour",
+            }, played: true);
+            _api.Watches.Add(new RemoteWatch { TvdbSeriesId = 600, TvdbEpisodeId = 1202, Season = 1, Episode = 4, WatchedAt = DateTimeOffset.UtcNow });
+            await engine.RunOnceAsync(CancellationToken.None);
+
+            var log = engine.Activity();
+            Assert.Equal(2, log.Count);
+            Assert.False(log[0].ToFeedrion);
+            Assert.Equal("Series 600", log[0].Series);
+            Assert.True(log[1].ToFeedrion);
+            Assert.Equal("Northwind", log[1].Series);
+            Assert.Equal("The Harbour", log[1].EpisodeName);
+            Assert.Equal(2, log[1].Season);
+            Assert.Equal(3, log[1].Episode);
+            Assert.Equal("max", log[1].UserName);
+
+            // Names stay on the server: nothing of them was sent.
+            Assert.DoesNotContain(_api.Calls, c => c.Body != null && c.Body.Contains("Northwind"));
+
+            // Fifty at most, and it survives a restart.
+            for (var i = 0; i < 60; i++) engine.RecordPlayedToggle(UserId, Ep(1300 + i), played: true);
+            await engine.RunOnceAsync(CancellationToken.None);
+            var reopened = new SyncEngine(_adapter, new LinkStore(_dir), new HttpClient(_api), () => "https://feedrion.example/api", (m, e) => { });
+            Assert.Equal(ActivityLog.Keep, reopened.Activity().Count);
+            Assert.True(reopened.Activity()[0].ToFeedrion);
+        }
+
+        [Fact]
+        public async Task A_link_can_refuse_to_ever_report_an_episode_unwatched()
+        {
+            var (engine, store) = Engine();
+            // Queued before the option was ticked.
+            engine.RecordPlayedToggle(UserId, Ep(1401), played: false);
+            engine.UpdateSettings(UserId, "max", new LinkSettings { NeverUnwatch = true });
+            Assert.True(store.Get(UserId)!.NeverUnwatch);
+            engine.RecordPlayedToggle(UserId, Ep(1402), played: false);
+            engine.RecordPlayedToggle(UserId, Ep(1403), played: true);
+            await engine.RunOnceAsync(CancellationToken.None);
+            var sent = _api.EventBatches.SelectMany(b => b).ToList();
+            Assert.DoesNotContain(sent, e => e.Type == WatchEvent.Unwatched);
+            Assert.Contains(sent, e => e.TvdbEpisodeId == 1403);
+        }
     }
 }

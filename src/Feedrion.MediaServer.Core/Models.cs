@@ -71,6 +71,13 @@ namespace Feedrion.MediaServer.Core
         /// import to a link's choice. Never sent, never stored.</summary>
         [JsonIgnore] public IReadOnlyList<string>? LibraryIds { get; set; }
 
+        // The server's own names and numbers, for the local activity log
+        // only. Never sent, never stored with the queue.
+        [JsonIgnore] public string? SeriesName { get; set; }
+        [JsonIgnore] public string? EpisodeName { get; set; }
+        [JsonIgnore] public int? LocalSeason { get; set; }
+        [JsonIgnore] public int? LocalNumber { get; set; }
+
         /// <summary>The same episode, whatever the event says about it.</summary>
         [JsonIgnore]
         public string EpisodeKey => TvdbEpisodeId.HasValue
@@ -101,6 +108,10 @@ namespace Feedrion.MediaServer.Core
         // The libraries the episode sits in: what a link's choice of libraries
         // is checked against. Never sent.
         [JsonIgnore] public IReadOnlyList<string>? LibraryIds { get; set; }
+
+        // For the local activity log only. Never sent.
+        [JsonIgnore] public string? SeriesName { get; set; }
+        [JsonIgnore] public string? EpisodeName { get; set; }
     }
 
     /// <summary>One library of the server, for the configuration page. Its name
@@ -125,6 +136,9 @@ namespace Feedrion.MediaServer.Core
     public sealed class LinkSettings
     {
         [JsonPropertyName("addNewShows")] public bool AddNewShows { get; set; }
+
+        /// <summary>Never tell Feedrion an episode is unwatched.</summary>
+        [JsonPropertyName("neverUnwatch")] public bool NeverUnwatch { get; set; }
 
         /// <summary>Null: every library, including the ones added later.</summary>
         [JsonPropertyName("libraryIds")] public List<string>? LibraryIds { get; set; }

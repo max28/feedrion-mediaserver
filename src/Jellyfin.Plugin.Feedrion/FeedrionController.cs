@@ -74,6 +74,10 @@ namespace Jellyfin.Plugin.Feedrion
         [HttpGet("Series")]
         public ActionResult<IEnumerable<MediaSeries>> GetSeries() => _engine.ListSeries().ToList();
 
+        /// <summary>The last 50 changes exchanged with Feedrion, newest first.</summary>
+        [HttpGet("Activity")]
+        public ActionResult<IEnumerable<ActivityEntry>> GetActivity() => _engine.Activity().ToList();
+
         /// <summary>Replace the server-wide « ignored series » list.</summary>
         [HttpPost("IgnoredSeries")]
         public ActionResult<IEnumerable<int>> SetIgnoredSeries([FromBody] List<int> tvdbIds)

@@ -5,8 +5,13 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select'], function (loadin
 
     // Emby binds the request body onto its DTOs: the lists travel as
     // comma-separated strings.
-    function settingsBody(addNewShows, allLibraries, ids) {
-        return { AddNewShows: addNewShows, AllLibraries: allLibraries, LibraryIds: ids.join(',') };
+    var SERVER_NAME = 'Emby';
+
+    function settingsBody(addNewShows, neverUnwatch, allLibraries, ids) {
+        return {
+            AddNewShows: addNewShows, NeverUnwatch: neverUnwatch,
+            AllLibraries: allLibraries, LibraryIds: ids.join(',')
+        };
     }
 
     function ignoredBody(ids) {
@@ -21,6 +26,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select'], function (loadin
         var ignored = [];
         var selectedUser = null;
         var optionsFor = null;
+        var TABS = ['options', 'users', 'ignored', 'activity', 'server'];
 
         // Emby's serializer may keep the C# property names: read both spellings.
         function pick(o, camel) {
@@ -129,6 +135,10 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select'], function (loadin
             box.appendChild(add.node);
             box.appendChild(el('div', 'Off: only the series already in « Mes séries » get their episodes marked watched.',
                 'fieldDescription'));
+            var never = checkbox('Never mark an episode unwatched in Feedrion', pick(link, 'neverUnwatch'));
+            never.node.style.marginTop = '.8em';
+            box.appendChild(never.node);
+            box.appendChild(el('div', 'An episode marked unplayed here stays watched in Feedrion.', 'fieldDescription'));
             var title = el('div', 'Linked libraries', 'inputLabel');
             title.style.marginTop = '1em';
             box.appendChild(title);
@@ -159,7 +169,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select'], function (loadin
                 var ids = boxes.filter(function (b) { return b.checked; }).map(function (b) { return b.value; });
                 save.disabled = true;
                 request('POST', 'Feedrion/Links/' + encodeURIComponent(pick(link, 'userId')) + '/Settings',
-                    settingsBody(add.input.checked, all.input.checked, ids))
+                    settingsBody(add.input.checked, never.input.checked, all.input.checked, ids))
                     .then(function (updated) {
                         if (updated) {
                             links = links.map(function (l) { return pick(l, 'userId') === pick(updated, 'userId') ? updated : l; });
@@ -299,9 +309,85 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select'], function (loadin
             if (hits.length > 30) box.appendChild(el('div', (hits.length - 30) + ' more — type more of the name.', 'fieldDescription'));
         }
 
+        // ── Activity ─────────────────────────────────────────────────────────────
+
+        function episodeCode(a) {
+            var season = pick(a, 'season');
+            var episode = pick(a, 'episode');
+            if (season === null || season === undefined || episode === null || episode === undefined) return '';
+            function two(n) { return (n < 10 ? '0' : '') + n; }
+            return 'S' + two(season) + 'E' + two(episode);
+        }
+
+        function renderActivity(list) {
+            var box = q('.feedrionActivity');
+            box.textContent = '';
+            if (!list || list.length === 0) {
+                box.appendChild(el('div', 'Nothing exchanged with Feedrion yet.', 'fieldDescription'));
+                return;
+            }
+            list.forEach(function (a) {
+                var toFeedrion = !!pick(a, 'toFeedrion');
+                var r = row();
+                r.style.alignItems = 'flex-start';
+                var arrow = el('div', toFeedrion ? SERVER_NAME + ' → Feedrion' : 'Feedrion → ' + SERVER_NAME);
+                arrow.style.minWidth = '11em';
+                arrow.style.fontWeight = '600';
+                arrow.style.color = toFeedrion ? '#0A4CFF' : '#1F8A5B';
+                r.appendChild(arrow);
+                var body = el('div');
+                body.style.flex = '1';
+                var series = pick(a, 'series') || ('TheTVDB ' + pick(a, 'tvdbSeriesId'));
+                var code = episodeCode(a);
+                var name = pick(a, 'episodeName');
+                body.appendChild(el('div', series + (code ? ' · ' + code : '') + (name ? ' · ' + name : ''), 'listItemBodyText'));
+                var what = pick(a, 'action') === 'unwatched' ? 'Marked unwatched' : 'Marked watched';
+                var user = pick(a, 'userName');
+                body.appendChild(el('div', what + (user ? ' — ' + user : ''), 'secondary listItemBodyText'));
+                r.appendChild(body);
+                var at = pick(a, 'at');
+                var when = el('div', at ? new Date(at).toLocaleString() : '', 'secondary');
+                when.style.whiteSpace = 'nowrap';
+                r.appendChild(when);
+                box.appendChild(r);
+            });
+        }
+
+        function loadActivity() {
+            call('GET', 'Feedrion/Activity').then(renderActivity);
+        }
+
+        // ── Tabs ─────────────────────────────────────────────────────────────────
+
+        function showTab(name) {
+            if (TABS.indexOf(name) < 0) name = TABS[0];
+            TABS.forEach(function (tab) {
+                var section = q('.feedrionTab-' + tab);
+                if (section) section.style.display = tab === name ? '' : 'none';
+                var b = q('.feedrionTabButton-' + tab);
+                if (b) {
+                    // classList, never className: the server's own button classes stay.
+                    b.classList.toggle('button-submit', tab === name);
+                    b.classList.toggle('button-alt', tab !== name);
+                }
+            });
+            try { sessionStorage.setItem('feedrionTab', name); } catch (e) { /* private window */ }
+            if (name === 'activity') loadActivity();
+        }
+
+        TABS.forEach(function (tab) {
+            var b = q('.feedrionTabButton-' + tab);
+            if (b) b.addEventListener('click', function () { showTab(tab); });
+        });
+
+        q('.feedrionActivityRefresh').addEventListener('click', loadActivity);
+
         // ── Wiring ───────────────────────────────────────────────────────────────
 
         view.addEventListener('viewshow', function () {
+            var remembered = null;
+            try { remembered = sessionStorage.getItem('feedrionTab'); } catch (e) { /* private window */ }
+            showTab(remembered || 'options');
             loading.show();
             optionsFor = null;
             ApiClient.getPluginConfiguration(pluginId).then(function (config) {

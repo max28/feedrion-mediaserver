@@ -42,6 +42,10 @@ namespace Feedrion.MediaServer.Core
         /// <summary>The libraries this link covers; null for all of them.</summary>
         [JsonPropertyName("library_ids")] public List<string>? LibraryIds { get; set; }
 
+        /// <summary>An episode marked unplayed here is never reported as
+        /// unwatched to Feedrion. Off by default.</summary>
+        [JsonPropertyName("never_unwatch")] public bool NeverUnwatch { get; set; }
+
         // Progress.
         [JsonPropertyName("watch_cursor")] public string? WatchCursor { get; set; }
         [JsonPropertyName("import_done")] public bool ImportDone { get; set; }
@@ -114,6 +118,8 @@ namespace Feedrion.MediaServer.Core
         private readonly string _dir;
         private readonly object _gate = new object();
         private readonly Dictionary<string, LinkState> _links;
+
+        public string DirectoryPath => _dir;
 
         public LinkStore(string directory)
         {

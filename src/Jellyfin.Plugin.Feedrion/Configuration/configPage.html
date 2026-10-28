@@ -17,12 +17,21 @@
                     server — never a title, a file name or a path. Requires Feedrion Premium.
                 </p>
 
+                <div class="feedrionTabs" style="display: flex; flex-wrap: wrap; gap: .5em; margin: 1em 0 1.5em;">
+                    <button is="emby-button" type="button" class="raised button-alt feedrionTabButton-options"><span>Options</span></button>
+                    <button is="emby-button" type="button" class="raised button-alt feedrionTabButton-users"><span>Users</span></button>
+                    <button is="emby-button" type="button" class="raised button-alt feedrionTabButton-ignored"><span>Ignored series</span></button>
+                    <button is="emby-button" type="button" class="raised button-alt feedrionTabButton-activity"><span>Activity</span></button>
+                    <button is="emby-button" type="button" class="raised button-alt feedrionTabButton-server"><span>Server</span></button>
+                </div>
+                <div class="feedrionTab-options">
                 <h3>Options</h3>
                 <p class="fieldDescription">
-                    For each server user, whether a series it watches but does not follow in Feedrion
+                    For each server user: whether a series it watches but does not follow in Feedrion
                     yet gets added there (off by default: on a profile shared with the family, nobody
-                    else's shows land in « Mes séries »), and which libraries are linked. They can be
-                    set before linking. How far an episode must be played is set in the Feedrion app.
+                    else's shows land in « Mes séries »), whether an episode marked unplayed here is
+                    reported to Feedrion, and which libraries are linked. They can be set before
+                    linking. How far an episode must be played is set in the Feedrion app.
                 </p>
                 <div class="selectContainer">
                     <label class="selectLabel" for="feedrionOptionsUser">User</label>
@@ -30,6 +39,8 @@
                 </div>
                 <div class="feedrionOptions"></div>
 
+                </div>
+                <div class="feedrionTab-users">
                 <h3>Users</h3>
                 <p class="fieldDescription">
                     Link a user, then type the code in the Feedrion app of THAT user
@@ -43,6 +54,8 @@
                     <div class="fieldDescription feedrionSyncStatus" aria-live="polite"></div>
                 </div>
 
+                </div>
+                <div class="feedrionTab-ignored">
                 <h3>Ignored series</h3>
                 <p class="fieldDescription">
                     Nothing about these series is ever sent to Feedrion, for any user: no watch,
@@ -57,6 +70,18 @@
                 <div class="feedrionSeriesResults"></div>
                 <div class="fieldDescription feedrionIgnoredStatus" aria-live="polite"></div>
 
+                </div>
+                <div class="feedrionTab-activity">
+                <h3>Activity</h3>
+                <p class="fieldDescription">
+                    The last 50 changes exchanged with Feedrion, newest first, and which way each one
+                    went. A watch sent to Feedrion is skipped there when the account does not follow
+                    the series — the app's « Activité récente » says so.
+                </p>
+                <button is="emby-button" type="button" class="raised button-alt feedrionActivityRefresh"><span>Refresh</span></button>
+                <div class="feedrionActivity" style="margin-top: 1em;"></div>
+                </div>
+                <div class="feedrionTab-server">
                 <form class="feedrionConfigForm">
                     <h3>Server</h3>
                     <div class="inputContainer">
@@ -83,6 +108,7 @@
                         </button>
                     </div>
                 </form>
+                </div>
             </div>
         </div>
         <script type="text/javascript">
@@ -90,8 +116,10 @@
                 var pluginId = '5f0c2a8e-6b1d-4c7e-9a3f-2d8e1b4c6a90';
                 var page = document.querySelector('#FeedrionConfigPage');
 
-                function settingsBody(addNewShows, allLibraries, ids) {
-                    return { addNewShows: addNewShows, libraryIds: allLibraries ? null : ids };
+                var SERVER_NAME = 'Jellyfin';
+
+                function settingsBody(addNewShows, neverUnwatch, allLibraries, ids) {
+                    return { addNewShows: addNewShows, neverUnwatch: neverUnwatch, libraryIds: allLibraries ? null : ids };
                 }
 
                 function ignoredBody(ids) {
@@ -105,6 +133,7 @@
                 var ignored = [];
                 var selectedUser = null;
                 var optionsFor = null;
+                var TABS = ['options', 'users', 'ignored', 'activity', 'server'];
 
                 // Emby's serializer may keep the C# property names: read both spellings.
                 function pick(o, camel) {
@@ -213,6 +242,10 @@
                     box.appendChild(add.node);
                     box.appendChild(el('div', 'Off: only the series already in « Mes séries » get their episodes marked watched.',
                         'fieldDescription'));
+                    var never = checkbox('Never mark an episode unwatched in Feedrion', pick(link, 'neverUnwatch'));
+                    never.node.style.marginTop = '.8em';
+                    box.appendChild(never.node);
+                    box.appendChild(el('div', 'An episode marked unplayed here stays watched in Feedrion.', 'fieldDescription'));
                     var title = el('div', 'Linked libraries', 'inputLabel');
                     title.style.marginTop = '1em';
                     box.appendChild(title);
@@ -243,7 +276,7 @@
                         var ids = boxes.filter(function (b) { return b.checked; }).map(function (b) { return b.value; });
                         save.disabled = true;
                         request('POST', 'Feedrion/Links/' + encodeURIComponent(pick(link, 'userId')) + '/Settings',
-                            settingsBody(add.input.checked, all.input.checked, ids))
+                            settingsBody(add.input.checked, never.input.checked, all.input.checked, ids))
                             .then(function (updated) {
                                 if (updated) {
                                     links = links.map(function (l) { return pick(l, 'userId') === pick(updated, 'userId') ? updated : l; });
@@ -383,9 +416,85 @@
                     if (hits.length > 30) box.appendChild(el('div', (hits.length - 30) + ' more — type more of the name.', 'fieldDescription'));
                 }
 
+                // ── Activity ─────────────────────────────────────────────────────────────
+
+                function episodeCode(a) {
+                    var season = pick(a, 'season');
+                    var episode = pick(a, 'episode');
+                    if (season === null || season === undefined || episode === null || episode === undefined) return '';
+                    function two(n) { return (n < 10 ? '0' : '') + n; }
+                    return 'S' + two(season) + 'E' + two(episode);
+                }
+
+                function renderActivity(list) {
+                    var box = q('.feedrionActivity');
+                    box.textContent = '';
+                    if (!list || list.length === 0) {
+                        box.appendChild(el('div', 'Nothing exchanged with Feedrion yet.', 'fieldDescription'));
+                        return;
+                    }
+                    list.forEach(function (a) {
+                        var toFeedrion = !!pick(a, 'toFeedrion');
+                        var r = row();
+                        r.style.alignItems = 'flex-start';
+                        var arrow = el('div', toFeedrion ? SERVER_NAME + ' → Feedrion' : 'Feedrion → ' + SERVER_NAME);
+                        arrow.style.minWidth = '11em';
+                        arrow.style.fontWeight = '600';
+                        arrow.style.color = toFeedrion ? '#0A4CFF' : '#1F8A5B';
+                        r.appendChild(arrow);
+                        var body = el('div');
+                        body.style.flex = '1';
+                        var series = pick(a, 'series') || ('TheTVDB ' + pick(a, 'tvdbSeriesId'));
+                        var code = episodeCode(a);
+                        var name = pick(a, 'episodeName');
+                        body.appendChild(el('div', series + (code ? ' · ' + code : '') + (name ? ' · ' + name : ''), 'listItemBodyText'));
+                        var what = pick(a, 'action') === 'unwatched' ? 'Marked unwatched' : 'Marked watched';
+                        var user = pick(a, 'userName');
+                        body.appendChild(el('div', what + (user ? ' — ' + user : ''), 'secondary listItemBodyText'));
+                        r.appendChild(body);
+                        var at = pick(a, 'at');
+                        var when = el('div', at ? new Date(at).toLocaleString() : '', 'secondary');
+                        when.style.whiteSpace = 'nowrap';
+                        r.appendChild(when);
+                        box.appendChild(r);
+                    });
+                }
+
+                function loadActivity() {
+                    call('GET', 'Feedrion/Activity').then(renderActivity);
+                }
+
+                // ── Tabs ─────────────────────────────────────────────────────────────────
+
+                function showTab(name) {
+                    if (TABS.indexOf(name) < 0) name = TABS[0];
+                    TABS.forEach(function (tab) {
+                        var section = q('.feedrionTab-' + tab);
+                        if (section) section.style.display = tab === name ? '' : 'none';
+                        var b = q('.feedrionTabButton-' + tab);
+                        if (b) {
+                            // classList, never className: the server's own button classes stay.
+                            b.classList.toggle('button-submit', tab === name);
+                            b.classList.toggle('button-alt', tab !== name);
+                        }
+                    });
+                    try { sessionStorage.setItem('feedrionTab', name); } catch (e) { /* private window */ }
+                    if (name === 'activity') loadActivity();
+                }
+
+                TABS.forEach(function (tab) {
+                    var b = q('.feedrionTabButton-' + tab);
+                    if (b) b.addEventListener('click', function () { showTab(tab); });
+                });
+
+                q('.feedrionActivityRefresh').addEventListener('click', loadActivity);
+
                 // ── Wiring ───────────────────────────────────────────────────────────────
 
                 page.addEventListener('pageshow', function () {
+                    var remembered = null;
+                    try { remembered = sessionStorage.getItem('feedrionTab'); } catch (e) { /* private window */ }
+                    showTab(remembered || 'options');
                     Dashboard.showLoadingMsg();
                     optionsFor = null;
                     ApiClient.getPluginConfiguration(pluginId).then(function (config) {

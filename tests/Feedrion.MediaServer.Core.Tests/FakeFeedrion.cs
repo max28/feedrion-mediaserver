@@ -113,12 +113,19 @@ namespace Feedrion.MediaServer.Core.Tests
         /// <summary>The library each series sits in, for MarkPlayed.</summary>
         public Dictionary<int, string> SeriesLibrary { get; } = new Dictionary<int, string>();
 
-        public bool MarkPlayed(string serverUserId, RemoteWatch watch, Func<IReadOnlyList<string>?, bool> covers)
+        public LibraryItem? MarkPlayed(string serverUserId, RemoteWatch watch, Func<IReadOnlyList<string>?, bool> covers)
         {
             var library = SeriesLibrary.TryGetValue(watch.TvdbSeriesId, out var l) ? new[] { l } : null;
-            if (!covers(library)) return false;
+            if (!covers(library)) return null;
             Marked.Add(watch);
-            return true;
+            return new LibraryItem
+            {
+                TvdbSeriesId = watch.TvdbSeriesId, TvdbEpisodeId = watch.TvdbEpisodeId, ItemId = "m",
+                SeriesName = "Series " + watch.TvdbSeriesId, EpisodeName = "Episode " + watch.Episode,
+            };
         }
+
+        public LibraryItem? Find(int tvdbSeriesId, int? tvdbEpisodeId, int? season, int? number) =>
+            Library.FirstOrDefault(i => tvdbEpisodeId.HasValue && i.TvdbEpisodeId == tvdbEpisodeId.Value);
     }
 }

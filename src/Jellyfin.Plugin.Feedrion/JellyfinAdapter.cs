@@ -57,6 +57,8 @@ namespace Jellyfin.Plugin.Feedrion
                 TvdbEpisodeId = ParseId(episode.GetProviderId(MetadataProvider.Tvdb)),
                 Season = episode.ParentIndexNumber,
                 Number = episode.IndexNumber,
+                SeriesName = episode.SeriesName,
+                EpisodeName = episode.Name,
             };
         }
 
@@ -72,6 +74,8 @@ namespace Jellyfin.Plugin.Feedrion
                 SeriesItemId = episode.SeriesId == Guid.Empty ? null : episode.SeriesId.ToString("N", CultureInfo.InvariantCulture),
                 Season = reference.Season,
                 Number = reference.Number,
+                SeriesName = reference.SeriesName,
+                EpisodeName = reference.EpisodeName,
             };
         }
 
@@ -211,6 +215,10 @@ namespace Jellyfin.Plugin.Feedrion
                     TvdbEpisodeId = reference.TvdbEpisodeId,
                     Season = reference.TvdbEpisodeId.HasValue ? null : reference.Season,
                     Episode = reference.TvdbEpisodeId.HasValue ? null : reference.Number,
+                    SeriesName = reference.SeriesName,
+                    EpisodeName = reference.EpisodeName,
+                    LocalSeason = reference.Season,
+                    LocalNumber = reference.Number,
                     At = data?.LastPlayedDate is DateTime at ? new DateTimeOffset(DateTime.SpecifyKind(at, DateTimeKind.Utc)) : null,
                     LibraryIds = LibrariesOf((Episode)item, scan),
                 });
@@ -218,21 +226,32 @@ namespace Jellyfin.Plugin.Feedrion
             return events.OrderBy(e => e.At ?? DateTimeOffset.MinValue).ToList();
         }
 
-        public bool MarkPlayed(string serverUserId, RemoteWatch watch, Func<IReadOnlyList<string>?, bool> covers)
+        public LibraryItem? MarkPlayed(string serverUserId, RemoteWatch watch, Func<IReadOnlyList<string>?, bool> covers)
         {
             var user = FindUser(serverUserId);
-            if (user == null) return false;
+            if (user == null) return null;
             var held = Lookup(watch);
-            if (held == null || !covers(held.LibraryIds) || !Guid.TryParse(held.ItemId, out var itemId)) return false;
+            if (held == null || !covers(held.LibraryIds) || !Guid.TryParse(held.ItemId, out var itemId)) return null;
             var item = _library.GetItemById(itemId);
-            if (item == null) return false;
+            if (item == null) return null;
             var data = _userData.GetUserData(user, item);
-            if (data == null || data.Played) return false;
+            if (data == null || data.Played) return null;
             data.Played = true;
             data.PlayCount = Math.Max(1, data.PlayCount);
             data.LastPlayedDate = watch.WatchedAt.UtcDateTime;
             _userData.SaveUserData(user, item, data, UserDataSaveReason.TogglePlayed, CancellationToken.None);
-            return true;
+            return held;
+        }
+
+        public LibraryItem? Find(int tvdbSeriesId, int? tvdbEpisodeId, int? season, int? number)
+        {
+            Dictionary<string, LibraryItem>? index;
+            lock (_gate) index = _index;
+            if (index == null) return null;
+            if (tvdbEpisodeId.HasValue && index.TryGetValue("e" + tvdbEpisodeId.Value, out var byId)) return byId;
+            if (season.HasValue && number.HasValue
+                && index.TryGetValue("s" + tvdbSeriesId + ":" + season + ":" + number, out var byNumber)) return byNumber;
+            return null;
         }
 
         private LibraryItem? Lookup(RemoteWatch watch)

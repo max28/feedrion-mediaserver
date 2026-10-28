@@ -43,7 +43,13 @@ namespace Emby.Plugin.Feedrion
         public string UserId { get; set; } = "";
         public bool AddNewShows { get; set; }
         public bool AllLibraries { get; set; } = true;
+        public bool NeverUnwatch { get; set; }
         public string LibraryIds { get; set; } = "";
+    }
+
+    [Route("/Feedrion/Activity", "GET", Summary = "The last changes exchanged with Feedrion")]
+    public sealed class GetFeedrionActivity : IReturn<List<ActivityEntry>>
+    {
     }
 
     [Route("/Feedrion/Series", "GET", Summary = "The server's series with a TheTVDB id")]
@@ -113,6 +119,8 @@ namespace Emby.Plugin.Feedrion
 
         public object Get(GetFeedrionSeries request) => Entry.Engine.ListSeries().ToList();
 
+        public object Get(GetFeedrionActivity request) => Entry.Engine.Activity().ToList();
+
         public object Post(SetFeedrionIgnoredSeries request)
         {
             var plugin = Plugin.Instance ?? throw new InvalidOperationException("Feedrion plugin not loaded.");
@@ -134,6 +142,7 @@ namespace Emby.Plugin.Feedrion
             var state = Entry.Engine.UpdateSettings(key, user.Name, new LinkSettings
             {
                 AddNewShows = request.AddNewShows,
+                NeverUnwatch = request.NeverUnwatch,
                 LibraryIds = request.AllLibraries
                     ? null
                     : (request.LibraryIds ?? "").Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).ToList(),

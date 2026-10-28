@@ -23,6 +23,7 @@ namespace Feedrion.MediaServer.Core
         [JsonPropertyName("pairingError")] public string? PairingError { get; set; }
         [JsonPropertyName("addNewShows")] public bool AddNewShows { get; set; }
         [JsonPropertyName("libraryIds")] public List<string>? LibraryIds { get; set; }
+        [JsonPropertyName("neverUnwatch")] public bool NeverUnwatch { get; set; }
 
         public static LinkView From(string userId, string? userName, LinkState? link, PendingLink? pending) => new LinkView
         {
@@ -41,6 +42,7 @@ namespace Feedrion.MediaServer.Core
             PairingError = pending?.Error,
             AddNewShows = link?.AddNewShows ?? false,
             LibraryIds = link?.LibraryIds,
+            NeverUnwatch = link?.NeverUnwatch ?? false,
         };
     }
 }
