@@ -43,8 +43,9 @@ namespace Feedrion.MediaServer.Core
         [JsonPropertyName("library_ids")] public List<string>? LibraryIds { get; set; }
 
         /// <summary>An episode marked unplayed here is never reported as
-        /// unwatched to Feedrion. Off by default.</summary>
-        [JsonPropertyName("never_unwatch")] public bool NeverUnwatch { get; set; }
+        /// unwatched to Feedrion. On by default: a « vu » given in Feedrion is
+        /// not undone by a server whose profile someone else uses.</summary>
+        [JsonPropertyName("never_unwatch")] public bool NeverUnwatch { get; set; } = true;
 
         // Progress.
         [JsonPropertyName("watch_cursor")] public string? WatchCursor { get; set; }

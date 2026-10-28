@@ -42,7 +42,8 @@ message and comment as if it already were.
   events, history import, flush of what was queued before, inventory and
   library changes, and the reverse `MarkPlayed`. A change resets every link's
   `LibraryFullAt`.
-- **`LinkState.NeverUnwatch`** (off by default): an unplayed mark is never
+- **`LinkState.NeverUnwatch`** (ON by default, for new links; a link saved
+  before keeps the value it stored): an unplayed mark is never
   queued, and one queued before the option is dropped at the next flush.
 - **The activity log is LOCAL** (`ActivityLog`, `activity.json` beside the
   links, 50 entries): names come from the server (`EpisodeRef.SeriesName`,

@@ -43,7 +43,7 @@ namespace Emby.Plugin.Feedrion
         public string UserId { get; set; } = "";
         public bool AddNewShows { get; set; }
         public bool AllLibraries { get; set; } = true;
-        public bool NeverUnwatch { get; set; }
+        public bool NeverUnwatch { get; set; } = true;
         public string LibraryIds { get; set; } = "";
     }
 

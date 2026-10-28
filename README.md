@@ -97,8 +97,9 @@ linking), then:
   "Mes séries"; the others are left out (the history import too). Keep it off
   on a profile the family shares. To bring in a series anyway, follow it in the
   app first.
-- **Never mark an episode unwatched in Feedrion** — off by default. On, an
-  episode marked unplayed on this server stays watched in Feedrion.
+- **Never mark an episode unwatched in Feedrion** — on by default. On, an
+  episode marked unplayed on this server stays watched in Feedrion; untick it
+  for a server marking "unplayed" should undo in Feedrion too.
 - **Linked libraries** — all of them by default (libraries added later
   included), or only the ones ticked. Everything follows that choice: the
   history import, playbacks, "available on this server", and the watches

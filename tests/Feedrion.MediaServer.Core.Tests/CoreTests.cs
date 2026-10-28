@@ -406,11 +406,21 @@ namespace Feedrion.MediaServer.Core.Tests
         }
 
         [Fact]
+        public void A_new_link_never_reports_an_episode_unwatched_by_default()
+        {
+            Assert.True(new LinkState().NeverUnwatch);
+            Assert.True(new LinkSettings().NeverUnwatch);
+            Assert.True(LinkView.From("u", "max", null, null).NeverUnwatch);
+        }
+
+        [Fact]
         public async Task A_link_can_refuse_to_ever_report_an_episode_unwatched()
         {
             var (engine, store) = Engine();
-            // Queued before the option was ticked.
+            // Queued while the option was unticked.
+            engine.UpdateSettings(UserId, "max", new LinkSettings { NeverUnwatch = false });
             engine.RecordPlayedToggle(UserId, Ep(1401), played: false);
+            Assert.Contains(store.Get(UserId)!.PendingEvents, e => e.Type == WatchEvent.Unwatched);
             engine.UpdateSettings(UserId, "max", new LinkSettings { NeverUnwatch = true });
             Assert.True(store.Get(UserId)!.NeverUnwatch);
             engine.RecordPlayedToggle(UserId, Ep(1402), played: false);
