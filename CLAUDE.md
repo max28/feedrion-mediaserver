@@ -31,6 +31,27 @@ message and comment as if it already were.
   nothing: events stay queued until the account is Premium again.
 - **Only TheTVDB ids leave the server.** No title, file name, path or server
   user name in any payload. An episode without a TheTVDB id is ignored.
+- **Per-link options belong to the server admin** (`LinkState.AddNewShows`,
+  off by default, sent as `add_new_shows` with every events batch;
+  `LinkState.LibraryIds`, null = every library). A choice of libraries filters
+  everything: history import, live events, inventory, and the reverse
+  `MarkPlayed`. With a choice made, an episode whose library is unknown is
+  left out. A change resets `ImportDone` and `LibraryFullAt`.
+- **Ignored series are server-wide** (`PluginConfiguration.IgnoredTvdbSeriesIds`,
+  read through `SyncEngine.IgnoredSeries`): filtered at every exit — live
+  events, history import, flush of what was queued before, inventory and
+  library changes, and the reverse `MarkPlayed`. A change resets every link's
+  `LibraryFullAt`.
+- **`LinkState.NeverUnwatch`** (off by default): an unplayed mark is never
+  queued, and one queued before the option is dropped at the next flush.
+- **The activity log is LOCAL** (`ActivityLog`, `activity.json` beside the
+  links, 50 entries): names come from the server (`EpisodeRef.SeriesName`,
+  `[JsonIgnore]` fields on `WatchEvent` / `LibraryItem`) and are never sent.
+  What was queued keeps its name in memory only (`SyncEngine._labels`); after a
+  restart the last library listing names it, or nothing does.
+- **The page has five tabs: Options ▸ Users ▸ Ignored series ▸ Activity ▸
+  Server**, in both plugins. The Jellyfin page and the Emby script share their
+  logic line for line; change both.
 - **The threshold belongs to the reader**, read from
   `GET /integrations/v1/mediaserver/config`; the server's own "played to
   completion" always counts.

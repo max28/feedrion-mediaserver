@@ -67,6 +67,17 @@ namespace Feedrion.MediaServer.Core
         [JsonPropertyName("at")] public DateTimeOffset? At { get; set; }
         [JsonPropertyName("percent")] public double? Percent { get; set; }
 
+        /// <summary>The libraries the episode sits in, to hold the history
+        /// import to a link's choice. Never sent, never stored.</summary>
+        [JsonIgnore] public IReadOnlyList<string>? LibraryIds { get; set; }
+
+        // The server's own names and numbers, for the local activity log
+        // only. Never sent, never stored with the queue.
+        [JsonIgnore] public string? SeriesName { get; set; }
+        [JsonIgnore] public string? EpisodeName { get; set; }
+        [JsonIgnore] public int? LocalSeason { get; set; }
+        [JsonIgnore] public int? LocalNumber { get; set; }
+
         /// <summary>The same episode, whatever the event says about it.</summary>
         [JsonIgnore]
         public string EpisodeKey => TvdbEpisodeId.HasValue
@@ -93,6 +104,44 @@ namespace Feedrion.MediaServer.Core
         // never sent (the API matches on ids).
         [JsonIgnore] public int? Season { get; set; }
         [JsonIgnore] public int? Number { get; set; }
+
+        // The libraries the episode sits in: what a link's choice of libraries
+        // is checked against. Never sent.
+        [JsonIgnore] public IReadOnlyList<string>? LibraryIds { get; set; }
+
+        // For the local activity log only. Never sent.
+        [JsonIgnore] public string? SeriesName { get; set; }
+        [JsonIgnore] public string? EpisodeName { get; set; }
+    }
+
+    /// <summary>One library of the server, for the configuration page. Its name
+    /// never leaves the server.</summary>
+    public sealed class MediaLibrary
+    {
+        [JsonPropertyName("id")] public string Id { get; set; } = "";
+        [JsonPropertyName("name")] public string Name { get; set; } = "";
+        [JsonPropertyName("type")] public string? Type { get; set; }
+    }
+
+    /// <summary>One series of the server, for the « ignored series » list. Its
+    /// name never leaves the server.</summary>
+    public sealed class MediaSeries
+    {
+        [JsonPropertyName("tvdbId")] public int TvdbId { get; set; }
+        [JsonPropertyName("name")] public string Name { get; set; } = "";
+        [JsonPropertyName("year")] public int? Year { get; set; }
+    }
+
+    /// <summary>What the configuration page sets on one server user's link.</summary>
+    public sealed class LinkSettings
+    {
+        [JsonPropertyName("addNewShows")] public bool AddNewShows { get; set; }
+
+        /// <summary>Never tell Feedrion an episode is unwatched.</summary>
+        [JsonPropertyName("neverUnwatch")] public bool NeverUnwatch { get; set; }
+
+        /// <summary>Null: every library, including the ones added later.</summary>
+        [JsonPropertyName("libraryIds")] public List<string>? LibraryIds { get; set; }
     }
 
     public sealed class LibraryBatch

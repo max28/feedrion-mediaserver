@@ -30,6 +30,40 @@ namespace Emby.Plugin.Feedrion
         public string UserId { get; set; } = "";
     }
 
+    [Route("/Feedrion/Libraries", "GET", Summary = "The server's libraries")]
+    public sealed class GetFeedrionLibraries : IReturn<List<MediaLibrary>>
+    {
+    }
+
+    /// <summary>A user's link settings. The libraries travel as one comma-separated
+    /// string (Emby's request binding), with [AllLibraries] for « every one ».</summary>
+    [Route("/Feedrion/Links/{UserId}/Settings", "POST", Summary = "Set what a user's link sends")]
+    public sealed class UpdateFeedrionLinkSettings : IReturn<LinkView>
+    {
+        public string UserId { get; set; } = "";
+        public bool AddNewShows { get; set; }
+        public bool AllLibraries { get; set; } = true;
+        public bool NeverUnwatch { get; set; }
+        public string LibraryIds { get; set; } = "";
+    }
+
+    [Route("/Feedrion/Activity", "GET", Summary = "The last changes exchanged with Feedrion")]
+    public sealed class GetFeedrionActivity : IReturn<List<ActivityEntry>>
+    {
+    }
+
+    [Route("/Feedrion/Series", "GET", Summary = "The server's series with a TheTVDB id")]
+    public sealed class GetFeedrionSeries : IReturn<List<MediaSeries>>
+    {
+    }
+
+    /// <summary>The ignored series, as one comma-separated string of TheTVDB ids.</summary>
+    [Route("/Feedrion/IgnoredSeries", "POST", Summary = "Replace the ignored series")]
+    public sealed class SetFeedrionIgnoredSeries : IReturn<int[]>
+    {
+        public string TvdbIds { get; set; } = "";
+    }
+
     [Route("/Feedrion/Sync", "POST", Summary = "Run a sync pass now and return the links")]
     public sealed class SyncFeedrion : IReturn<List<LinkView>>
     {
@@ -79,6 +113,41 @@ namespace Emby.Plugin.Feedrion
                 })
                 .OrderBy(v => v.UserName, StringComparer.OrdinalIgnoreCase)
                 .ToList();
+        }
+
+        public object Get(GetFeedrionLibraries request) => Entry.Engine.ListLibraries().ToList();
+
+        public object Get(GetFeedrionSeries request) => Entry.Engine.ListSeries().ToList();
+
+        public object Get(GetFeedrionActivity request) => Entry.Engine.Activity().ToList();
+
+        public object Post(SetFeedrionIgnoredSeries request)
+        {
+            var plugin = Plugin.Instance ?? throw new InvalidOperationException("Feedrion plugin not loaded.");
+            var engine = Entry.Engine;
+            plugin.Configuration.IgnoredTvdbSeriesIds = (request.TvdbIds ?? "")
+                .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(raw => int.TryParse(raw.Trim(), System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture, out var id) ? id : 0)
+                .Where(id => id > 0).Distinct().OrderBy(id => id).ToArray();
+            plugin.SaveConfiguration();
+            engine.IgnoredSeriesChanged();
+            return plugin.Configuration.IgnoredTvdbSeriesIds;
+        }
+
+        public object Post(UpdateFeedrionLinkSettings request)
+        {
+            var user = Entry.Adapter.FindUser(request.UserId) ?? throw new ArgumentException("Unknown user.");
+            var key = EmbyAdapter.UserKey(user);
+            var state = Entry.Engine.UpdateSettings(key, user.Name, new LinkSettings
+            {
+                AddNewShows = request.AddNewShows,
+                NeverUnwatch = request.NeverUnwatch,
+                LibraryIds = request.AllLibraries
+                    ? null
+                    : (request.LibraryIds ?? "").Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).ToList(),
+            });
+            return LinkView.From(key, user.Name, state, Entry.Engine.GetPending(key));
         }
 
         public async Task<object> Post(StartFeedrionLink request)

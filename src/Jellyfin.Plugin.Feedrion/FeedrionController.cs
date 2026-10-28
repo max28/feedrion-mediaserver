@@ -66,6 +66,43 @@ namespace Jellyfin.Plugin.Feedrion
             }
         }
 
+        /// <summary>The server's libraries, for the per-user choice.</summary>
+        [HttpGet("Libraries")]
+        public ActionResult<IEnumerable<MediaLibrary>> GetLibraries() => _engine.ListLibraries().ToList();
+
+        /// <summary>The server's series with a TheTVDB id, for the ignored list.</summary>
+        [HttpGet("Series")]
+        public ActionResult<IEnumerable<MediaSeries>> GetSeries() => _engine.ListSeries().ToList();
+
+        /// <summary>The last 50 changes exchanged with Feedrion, newest first.</summary>
+        [HttpGet("Activity")]
+        public ActionResult<IEnumerable<ActivityEntry>> GetActivity() => _engine.Activity().ToList();
+
+        /// <summary>Replace the server-wide « ignored series » list.</summary>
+        [HttpPost("IgnoredSeries")]
+        public ActionResult<IEnumerable<int>> SetIgnoredSeries([FromBody] List<int> tvdbIds)
+        {
+            var plugin = Plugin.Instance;
+            if (plugin == null) return NotFound();
+            plugin.Configuration.IgnoredTvdbSeriesIds = (tvdbIds ?? new List<int>())
+                .Where(id => id > 0).Distinct().OrderBy(id => id).ToArray();
+            plugin.SaveConfiguration();
+            _engine.IgnoredSeriesChanged();
+            return plugin.Configuration.IgnoredTvdbSeriesIds;
+        }
+
+        /// <summary>What a server user's link sends: which libraries, and
+        /// whether a series not followed yet in Feedrion gets added.</summary>
+        [HttpPost("Links/{userId}/Settings")]
+        public ActionResult<LinkView> UpdateSettings([FromRoute] string userId, [FromBody] LinkSettings settings)
+        {
+            if (!Guid.TryParse(userId, out var id) || _users.GetUserById(id) is not { } user)
+                return NotFound();
+            var key = JellyfinAdapter.UserKey(user.Id);
+            var state = _engine.UpdateSettings(key, user.Username, settings ?? new LinkSettings());
+            return LinkView.From(key, user.Username, state, _engine.GetPending(key));
+        }
+
         [HttpDelete("Links/{userId}")]
         public async Task<ActionResult> Unlink([FromRoute] string userId, CancellationToken ct)
         {

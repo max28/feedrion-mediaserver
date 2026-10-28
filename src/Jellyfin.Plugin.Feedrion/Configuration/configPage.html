@@ -17,25 +17,76 @@
                     server — never a title, a file name or a path. Requires Feedrion Premium.
                 </p>
 
+                <div class="feedrionTabs" style="display: flex; flex-wrap: wrap; gap: .5em; margin: 1em 0 1.5em;">
+                    <button is="emby-button" type="button" class="raised button-alt feedrionTabButton-options"><span>Options</span></button>
+                    <button is="emby-button" type="button" class="raised button-alt feedrionTabButton-users"><span>Users</span></button>
+                    <button is="emby-button" type="button" class="raised button-alt feedrionTabButton-ignored"><span>Ignored series</span></button>
+                    <button is="emby-button" type="button" class="raised button-alt feedrionTabButton-activity"><span>Activity</span></button>
+                    <button is="emby-button" type="button" class="raised button-alt feedrionTabButton-server"><span>Server</span></button>
+                </div>
+                <div class="feedrionTab-options">
+                <h3>Options</h3>
+                <p class="fieldDescription">
+                    For each server user: whether a series it watches but does not follow in Feedrion
+                    yet gets added there (off by default: on a profile shared with the family, nobody
+                    else's shows land in « Mes séries »), whether an episode marked unplayed here is
+                    reported to Feedrion, and which libraries are linked. They can be set before
+                    linking. How far an episode must be played is set in the Feedrion app.
+                </p>
+                <div class="selectContainer">
+                    <label class="selectLabel" for="feedrionOptionsUser">User</label>
+                    <select is="emby-select" id="feedrionOptionsUser" class="emby-select-withcolor emby-select feedrionOptionsUser"></select>
+                </div>
+                <div class="feedrionOptions"></div>
+
+                </div>
+                <div class="feedrionTab-users">
                 <h3>Users</h3>
                 <p class="fieldDescription">
                     Link a user, then type the code in the Feedrion app of THAT user
-                    (Settings ▸ Integrations ▸ Connected devices). How far an episode must be played,
-                    and whether shows never started are followed, are set there, in the app.
+                    (Settings ▸ Integrations ▸ Connected devices).
                 </p>
-                <div id="feedrionLinks"></div>
+                <div class="feedrionLinks"></div>
                 <div style="margin: 1em 0;">
-                    <button is="emby-button" type="button" id="feedrionSyncNow" class="raised button-alt">
+                    <button is="emby-button" type="button" class="raised button-alt feedrionSyncNow">
                         <span>Sync now</span>
                     </button>
-                    <div id="feedrionSyncStatus" class="fieldDescription" aria-live="polite"></div>
+                    <div class="fieldDescription feedrionSyncStatus" aria-live="polite"></div>
                 </div>
 
-                <form id="FeedrionConfigForm">
+                </div>
+                <div class="feedrionTab-ignored">
+                <h3>Ignored series</h3>
+                <p class="fieldDescription">
+                    Nothing about these series is ever sent to Feedrion, for any user: no watch,
+                    no « available on this server ». A series already in « Mes séries » is removed in the
+                    Feedrion app — once removed there, this server never adds it back.
+                </p>
+                <div class="feedrionIgnored"></div>
+                <div class="inputContainer" style="margin-top: 1em;">
+                    <label class="inputLabel inputLabelUnfocused" for="feedrionSeriesFilter">Find a series of this server to ignore</label>
+                    <input id="feedrionSeriesFilter" type="search" is="emby-input" class="feedrionSeriesFilter" autocomplete="off" />
+                </div>
+                <div class="feedrionSeriesResults"></div>
+                <div class="fieldDescription feedrionIgnoredStatus" aria-live="polite"></div>
+
+                </div>
+                <div class="feedrionTab-activity">
+                <h3>Activity</h3>
+                <p class="fieldDescription">
+                    The last 50 changes exchanged with Feedrion, newest first, and which way each one
+                    went. A watch sent to Feedrion is skipped there when the account does not follow
+                    the series — the app's « Activité récente » says so.
+                </p>
+                <button is="emby-button" type="button" class="raised button-alt feedrionActivityRefresh"><span>Refresh</span></button>
+                <div class="feedrionActivity" style="margin-top: 1em;"></div>
+                </div>
+                <div class="feedrionTab-server">
+                <form class="feedrionConfigForm">
                     <h3>Server</h3>
                     <div class="inputContainer">
                         <label class="inputLabel inputLabelUnfocused" for="PublicServerUrl">Public address of this server</label>
-                        <input id="PublicServerUrl" name="PublicServerUrl" type="url" is="emby-input" />
+                        <input id="PublicServerUrl" name="PublicServerUrl" type="url" is="emby-input" class="txtPublicServerUrl" />
                         <div class="fieldDescription">
                             Optional. Turns « available on this server » into a link that opens the episode here,
                             in the reader's own browser. Feedrion never connects to it.
@@ -43,12 +94,12 @@
                     </div>
                     <div class="inputContainer">
                         <label class="inputLabel inputLabelUnfocused" for="SyncIntervalMinutes">Minutes between two passes</label>
-                        <input id="SyncIntervalMinutes" name="SyncIntervalMinutes" type="number" min="5" max="1440" is="emby-input" />
+                        <input id="SyncIntervalMinutes" name="SyncIntervalMinutes" type="number" min="5" max="1440" is="emby-input" class="txtSyncInterval" />
                         <div class="fieldDescription">A playback is sent within seconds whatever this says.</div>
                     </div>
                     <div class="inputContainer">
                         <label class="inputLabel inputLabelUnfocused" for="ApiBaseUrl">Feedrion API address</label>
-                        <input id="ApiBaseUrl" name="ApiBaseUrl" type="url" is="emby-input" />
+                        <input id="ApiBaseUrl" name="ApiBaseUrl" type="url" is="emby-input" class="txtApiBaseUrl" />
                         <div class="fieldDescription">Leave the default unless told otherwise. https only.</div>
                     </div>
                     <div>
@@ -57,13 +108,38 @@
                         </button>
                     </div>
                 </form>
+                </div>
             </div>
         </div>
         <script type="text/javascript">
             (function () {
                 var pluginId = '5f0c2a8e-6b1d-4c7e-9a3f-2d8e1b4c6a90';
                 var page = document.querySelector('#FeedrionConfigPage');
+
+                var SERVER_NAME = 'Jellyfin';
+
+                function settingsBody(addNewShows, neverUnwatch, allLibraries, ids) {
+                    return { addNewShows: addNewShows, neverUnwatch: neverUnwatch, libraryIds: allLibraries ? null : ids };
+                }
+
+                function ignoredBody(ids) {
+                    return ids;
+                }
+
                 var timer = null;
+                var links = [];
+                var libraries = [];
+                var series = [];
+                var ignored = [];
+                var selectedUser = null;
+                var optionsFor = null;
+                var TABS = ['options', 'users', 'ignored', 'activity', 'server'];
+
+                // Emby's serializer may keep the C# property names: read both spellings.
+                function pick(o, camel) {
+                    var pascal = camel.charAt(0).toUpperCase() + camel.slice(1);
+                    return o[camel] !== undefined ? o[camel] : o[pascal];
+                }
 
                 function el(tag, text, cls) {
                     var node = document.createElement(tag);
@@ -72,105 +148,408 @@
                     return node;
                 }
 
+                function q(selector) {
+                    return page.querySelector(selector);
+                }
+
+                function request(method, path, body) {
+                    var options = { type: method, url: ApiClient.getUrl(path), dataType: method === 'DELETE' ? null : 'json' };
+                    if (body !== undefined) {
+                        options.data = JSON.stringify(body);
+                        options.contentType = 'application/json';
+                    }
+                    return ApiClient.fetch(options);
+                }
+
                 function call(method, path) {
-                    return ApiClient.fetch({ type: method, url: ApiClient.getUrl(path), dataType: 'json' })
-                        .catch(function () { return null; });
+                    return request(method, path).catch(function () { return null; });
                 }
 
-                function statusText(link) {
-                    if (link.pairingCode) return 'Code: ' + link.pairingCode + ' — type it in the Feedrion app.';
-                    if (!link.linked) return link.lastError === 'revoked' ? 'Disconnected from the app.' : 'Not linked.';
-                    var who = link.feedrionName ? 'Linked to ' + link.feedrionName : 'Linked';
-                    if (link.premium === false) return who + ' — Premium required, nothing is exchanged.';
-                    if (link.lastError) return who + ' — last pass: ' + link.lastError;
-                    return who + (link.lastSyncAt ? ' — synced ' + new Date(link.lastSyncAt).toLocaleString() : '');
+                function button(text, onClick) {
+                    var b = el('button');
+                    b.setAttribute('is', 'emby-button');
+                    b.type = 'button';
+                    b.className = 'raised button-alt';
+                    b.appendChild(el('span', text));
+                    b.addEventListener('click', onClick);
+                    return b;
                 }
 
-                function render(links) {
-                    var box = page.querySelector('#feedrionLinks');
+                function checkbox(label, checked) {
+                    var wrap = el('label');
+                    wrap.style.display = 'block';
+                    wrap.style.margin = '.3em 0';
+                    var input = el('input');
+                    input.type = 'checkbox';
+                    input.checked = !!checked;
+                    input.style.marginRight = '.5em';
+                    wrap.appendChild(input);
+                    wrap.appendChild(document.createTextNode(label));
+                    return { node: wrap, input: input };
+                }
+
+                function row() {
+                    var r = el('div', null, 'listItem');
+                    r.style.display = 'flex';
+                    r.style.alignItems = 'center';
+                    r.style.gap = '1em';
+                    r.style.padding = '.4em 0';
+                    return r;
+                }
+
+                function findLink(userId) {
+                    for (var i = 0; i < links.length; i++) if (pick(links[i], 'userId') === userId) return links[i];
+                    return null;
+                }
+
+                // ── Options, per user ────────────────────────────────────────────────────
+
+                function userLabel(l) {
+                    var name = pick(l, 'userName') || pick(l, 'userId');
+                    if (!pick(l, 'linked')) return name + ' — not linked';
+                    var who = pick(l, 'feedrionName');
+                    return name + ' — linked' + (who ? ' to ' + who : '');
+                }
+
+                function renderUserPicker() {
+                    var select = q('.feedrionOptionsUser');
+                    if (!selectedUser || !findLink(selectedUser)) {
+                        var first = links.filter(function (l) { return pick(l, 'linked'); })[0] || links[0];
+                        selectedUser = first ? pick(first, 'userId') : null;
+                    }
+                    select.textContent = '';
+                    links.forEach(function (l) {
+                        var option = el('option', userLabel(l));
+                        option.value = pick(l, 'userId');
+                        select.appendChild(option);
+                    });
+                    if (selectedUser) select.value = selectedUser;
+                }
+
+                function renderOptions() {
+                    var box = q('.feedrionOptions');
                     box.textContent = '';
-                    (links || []).forEach(function (link) {
-                        var row = el('div', null, 'listItem');
-                        row.style.display = 'flex';
-                        row.style.alignItems = 'center';
-                        row.style.gap = '1em';
-                        row.style.padding = '.5em 0';
+                    optionsFor = selectedUser;
+                    var link = selectedUser ? findLink(selectedUser) : null;
+                    if (!link) {
+                        box.appendChild(el('div', 'No user on this server.', 'fieldDescription'));
+                        return;
+                    }
+                    var chosen = pick(link, 'libraryIds');
+                    if (chosen === undefined) chosen = null;
+                    var add = checkbox('Add to Feedrion the series this user watches that it does not follow yet',
+                        pick(link, 'addNewShows'));
+                    box.appendChild(add.node);
+                    box.appendChild(el('div', 'Off: only the series already in « Mes séries » get their episodes marked watched.',
+                        'fieldDescription'));
+                    var never = checkbox('Never mark an episode unwatched in Feedrion', pick(link, 'neverUnwatch'));
+                    never.node.style.marginTop = '.8em';
+                    box.appendChild(never.node);
+                    box.appendChild(el('div', 'An episode marked unplayed here stays watched in Feedrion.', 'fieldDescription'));
+                    var title = el('div', 'Linked libraries', 'inputLabel');
+                    title.style.marginTop = '1em';
+                    box.appendChild(title);
+                    var all = checkbox('All libraries, including the ones added later', chosen === null);
+                    box.appendChild(all.node);
+                    var list = el('div');
+                    list.style.marginLeft = '1.5em';
+                    var boxes = [];
+                    libraries.forEach(function (lib) {
+                        var id = pick(lib, 'id');
+                        var type = pick(lib, 'type');
+                        var b = checkbox(pick(lib, 'name') + (type ? ' (' + type + ')' : ''), chosen === null || chosen.indexOf(id) >= 0);
+                        b.input.value = id;
+                        boxes.push(b.input);
+                        list.appendChild(b.node);
+                    });
+                    function sync() {
+                        boxes.forEach(function (b) { b.disabled = all.input.checked; });
+                    }
+                    all.input.addEventListener('change', sync);
+                    sync();
+                    box.appendChild(list);
+                    var actions = el('div');
+                    actions.style.marginTop = '.6em';
+                    var note = el('span', '', 'fieldDescription');
+                    note.style.marginLeft = '1em';
+                    var save = button('Save options', function () {
+                        var ids = boxes.filter(function (b) { return b.checked; }).map(function (b) { return b.value; });
+                        save.disabled = true;
+                        request('POST', 'Feedrion/Links/' + encodeURIComponent(pick(link, 'userId')) + '/Settings',
+                            settingsBody(add.input.checked, never.input.checked, all.input.checked, ids))
+                            .then(function (updated) {
+                                if (updated) {
+                                    links = links.map(function (l) { return pick(l, 'userId') === pick(updated, 'userId') ? updated : l; });
+                                }
+                                note.textContent = 'Saved — sent again at the next pass.';
+                            }, function () {
+                                note.textContent = 'Could not save.';
+                            })
+                            .then(function () { save.disabled = false; });
+                    });
+                    actions.appendChild(save);
+                    actions.appendChild(note);
+                    box.appendChild(actions);
+                }
+
+                // ── Users ────────────────────────────────────────────────────────────────
+
+                function statusText(l) {
+                    var code = pick(l, 'pairingCode');
+                    if (code) return 'Code: ' + code + ' — type it in the Feedrion app.';
+                    if (!pick(l, 'linked')) return pick(l, 'lastError') === 'revoked' ? 'Disconnected from the app.' : 'Not linked.';
+                    var name = pick(l, 'feedrionName');
+                    var who = name ? 'Linked to ' + name : 'Linked';
+                    if (pick(l, 'premium') === false) return who + ' — Premium required, nothing is exchanged.';
+                    if (pick(l, 'lastError')) return who + ' — last pass: ' + pick(l, 'lastError');
+                    var at = pick(l, 'lastSyncAt');
+                    return who + (at ? ' — synced ' + new Date(at).toLocaleString() : '');
+                }
+
+                function renderLinks() {
+                    var box = q('.feedrionLinks');
+                    box.textContent = '';
+                    links.forEach(function (l) {
+                        var userId = pick(l, 'userId');
+                        var r = row();
                         var body = el('div');
                         body.style.flex = '1';
-                        body.appendChild(el('div', link.userName || link.userId, 'listItemBodyText'));
-                        body.appendChild(el('div', statusText(link), 'secondary listItemBodyText'));
-                        if (link.pairingUrl) {
-                            var a = el('a', link.pairingUrl);
-                            a.href = link.pairingUrl;
+                        body.appendChild(el('div', pick(l, 'userName') || userId, 'listItemBodyText'));
+                        body.appendChild(el('div', statusText(l), 'secondary listItemBodyText'));
+                        var url = pick(l, 'pairingUrl');
+                        if (url) {
+                            var a = el('a', url);
+                            a.href = url;
                             a.target = '_blank';
                             a.rel = 'noopener noreferrer';
                             body.appendChild(a);
                         }
-                        row.appendChild(body);
-                        var button = el('button');
-                        button.setAttribute('is', 'emby-button');
-                        button.className = 'raised button-alt';
-                        button.type = 'button';
-                        button.appendChild(el('span', link.linked ? 'Unlink' : 'Link'));
-                        button.addEventListener('click', function () {
-                            var path = 'Feedrion/Links/' + encodeURIComponent(link.userId);
-                            var request = link.linked ? call('DELETE', path) : call('POST', path + '/Start');
-                            request.then(refresh);
-                        });
-                        row.appendChild(button);
-                        box.appendChild(row);
+                        r.appendChild(body);
+                        r.appendChild(button(pick(l, 'linked') ? 'Unlink' : 'Link', function () {
+                            var path = 'Feedrion/Links/' + encodeURIComponent(userId);
+                            (pick(l, 'linked') ? call('DELETE', path) : call('POST', path + '/Start')).then(refresh);
+                        }));
+                        box.appendChild(r);
                     });
                 }
 
                 function refresh() {
-                    call('GET', 'Feedrion/Links').then(function (links) {
-                        render(links);
-                        var waiting = (links || []).some(function (l) { return !!l.pairingCode; });
+                    Promise.all([call('GET', 'Feedrion/Libraries'), call('GET', 'Feedrion/Links')]).then(function (both) {
+                        libraries = both[0] || [];
+                        links = both[1] || [];
+                        renderLinks();
+                        renderUserPicker();
+                        // Not redrawn by the pairing poll: it would undo unsaved ticks.
+                        if (optionsFor !== selectedUser) renderOptions();
+                        var waiting = links.some(function (l) { return !!pick(l, 'pairingCode'); });
                         clearTimeout(timer);
                         if (waiting) timer = setTimeout(refresh, 3000);
                     });
                 }
 
+                // ── Ignored series ───────────────────────────────────────────────────────
+
+                function seriesName(id) {
+                    for (var i = 0; i < series.length; i++) {
+                        if (pick(series[i], 'tvdbId') === id) {
+                            var year = pick(series[i], 'year');
+                            return pick(series[i], 'name') + (year ? ' (' + year + ')' : '');
+                        }
+                    }
+                    return 'TheTVDB ' + id + ' (no longer on this server)';
+                }
+
+                function saveIgnored(ids) {
+                    var status = q('.feedrionIgnoredStatus');
+                    status.textContent = 'Saving…';
+                    request('POST', 'Feedrion/IgnoredSeries', ignoredBody(ids)).then(function (saved) {
+                        ignored = (saved || ids).map(Number);
+                        renderIgnored();
+                        status.textContent = 'Saved.';
+                    }, function () {
+                        status.textContent = 'Could not save.';
+                    });
+                }
+
+                function renderIgnored() {
+                    var box = q('.feedrionIgnored');
+                    box.textContent = '';
+                    if (ignored.length === 0) box.appendChild(el('div', 'No series ignored.', 'fieldDescription'));
+                    ignored.slice().sort(function (a, b) {
+                        return seriesName(a).localeCompare(seriesName(b));
+                    }).forEach(function (id) {
+                        var r = row();
+                        var name = el('div', seriesName(id), 'listItemBodyText');
+                        name.style.flex = '1';
+                        r.appendChild(name);
+                        r.appendChild(button('Stop ignoring', function () {
+                            saveIgnored(ignored.filter(function (x) { return x !== id; }));
+                        }));
+                        box.appendChild(r);
+                    });
+                    renderSeriesResults();
+                }
+
+                function renderSeriesResults() {
+                    var text = q('.feedrionSeriesFilter').value.trim().toLowerCase();
+                    var box = q('.feedrionSeriesResults');
+                    box.textContent = '';
+                    if (!text) return;
+                    var hits = series.filter(function (s) {
+                        return ignored.indexOf(pick(s, 'tvdbId')) < 0 && String(pick(s, 'name')).toLowerCase().indexOf(text) >= 0;
+                    });
+                    if (hits.length === 0) {
+                        box.appendChild(el('div', 'No other series of this server matches.', 'fieldDescription'));
+                        return;
+                    }
+                    hits.slice(0, 30).forEach(function (s) {
+                        var id = pick(s, 'tvdbId');
+                        var r = row();
+                        var name = el('div', seriesName(id), 'listItemBodyText');
+                        name.style.flex = '1';
+                        r.appendChild(name);
+                        r.appendChild(button('Ignore', function () {
+                            saveIgnored(ignored.concat([id]));
+                        }));
+                        box.appendChild(r);
+                    });
+                    if (hits.length > 30) box.appendChild(el('div', (hits.length - 30) + ' more — type more of the name.', 'fieldDescription'));
+                }
+
+                // ── Activity ─────────────────────────────────────────────────────────────
+
+                function episodeCode(a) {
+                    var season = pick(a, 'season');
+                    var episode = pick(a, 'episode');
+                    if (season === null || season === undefined || episode === null || episode === undefined) return '';
+                    function two(n) { return (n < 10 ? '0' : '') + n; }
+                    return 'S' + two(season) + 'E' + two(episode);
+                }
+
+                function renderActivity(list) {
+                    var box = q('.feedrionActivity');
+                    box.textContent = '';
+                    if (!list || list.length === 0) {
+                        box.appendChild(el('div', 'Nothing exchanged with Feedrion yet.', 'fieldDescription'));
+                        return;
+                    }
+                    list.forEach(function (a) {
+                        var toFeedrion = !!pick(a, 'toFeedrion');
+                        var r = row();
+                        r.style.alignItems = 'flex-start';
+                        var arrow = el('div', toFeedrion ? SERVER_NAME + ' → Feedrion' : 'Feedrion → ' + SERVER_NAME);
+                        arrow.style.minWidth = '11em';
+                        arrow.style.fontWeight = '600';
+                        arrow.style.color = toFeedrion ? '#0A4CFF' : '#1F8A5B';
+                        r.appendChild(arrow);
+                        var body = el('div');
+                        body.style.flex = '1';
+                        var series = pick(a, 'series') || ('TheTVDB ' + pick(a, 'tvdbSeriesId'));
+                        var code = episodeCode(a);
+                        var name = pick(a, 'episodeName');
+                        body.appendChild(el('div', series + (code ? ' · ' + code : '') + (name ? ' · ' + name : ''), 'listItemBodyText'));
+                        var what = pick(a, 'action') === 'unwatched' ? 'Marked unwatched' : 'Marked watched';
+                        var user = pick(a, 'userName');
+                        body.appendChild(el('div', what + (user ? ' — ' + user : ''), 'secondary listItemBodyText'));
+                        r.appendChild(body);
+                        var at = pick(a, 'at');
+                        var when = el('div', at ? new Date(at).toLocaleString() : '', 'secondary');
+                        when.style.whiteSpace = 'nowrap';
+                        r.appendChild(when);
+                        box.appendChild(r);
+                    });
+                }
+
+                function loadActivity() {
+                    call('GET', 'Feedrion/Activity').then(renderActivity);
+                }
+
+                // ── Tabs ─────────────────────────────────────────────────────────────────
+
+                function showTab(name) {
+                    if (TABS.indexOf(name) < 0) name = TABS[0];
+                    TABS.forEach(function (tab) {
+                        var section = q('.feedrionTab-' + tab);
+                        if (section) section.style.display = tab === name ? '' : 'none';
+                        var b = q('.feedrionTabButton-' + tab);
+                        if (b) {
+                            // classList, never className: the server's own button classes stay.
+                            b.classList.toggle('button-submit', tab === name);
+                            b.classList.toggle('button-alt', tab !== name);
+                        }
+                    });
+                    try { sessionStorage.setItem('feedrionTab', name); } catch (e) { /* private window */ }
+                    if (name === 'activity') loadActivity();
+                }
+
+                TABS.forEach(function (tab) {
+                    var b = q('.feedrionTabButton-' + tab);
+                    if (b) b.addEventListener('click', function () { showTab(tab); });
+                });
+
+                q('.feedrionActivityRefresh').addEventListener('click', loadActivity);
+
+                // ── Wiring ───────────────────────────────────────────────────────────────
+
                 page.addEventListener('pageshow', function () {
+                    var remembered = null;
+                    try { remembered = sessionStorage.getItem('feedrionTab'); } catch (e) { /* private window */ }
+                    showTab(remembered || 'options');
                     Dashboard.showLoadingMsg();
+                    optionsFor = null;
                     ApiClient.getPluginConfiguration(pluginId).then(function (config) {
-                        page.querySelector('#PublicServerUrl').value = config.PublicServerUrl || '';
-                        page.querySelector('#SyncIntervalMinutes').value = config.SyncIntervalMinutes || 15;
-                        page.querySelector('#ApiBaseUrl').value = config.ApiBaseUrl || '';
+                        q('.txtPublicServerUrl').value = config.PublicServerUrl || '';
+                        q('.txtSyncInterval').value = config.SyncIntervalMinutes || 15;
+                        q('.txtApiBaseUrl').value = config.ApiBaseUrl || '';
+                        ignored = (config.IgnoredTvdbSeriesIds || []).map(Number);
                         Dashboard.hideLoadingMsg();
+                        call('GET', 'Feedrion/Series').then(function (list) {
+                            series = list || [];
+                            renderIgnored();
+                        });
+                        renderIgnored();
                     });
                     refresh();
                 });
 
                 page.addEventListener('pagehide', function () { clearTimeout(timer); });
 
-                page.querySelector('#feedrionSyncNow').addEventListener('click', function () {
-                    var button = this;
-                    var status = page.querySelector('#feedrionSyncStatus');
-                    button.disabled = true;
-                    status.textContent = 'Syncing…';
-                    // The server answers once the pass is over, with the links as they now are.
-                    ApiClient.fetch({ type: 'POST', url: ApiClient.getUrl('Feedrion/Sync'), dataType: 'json' })
-                        .then(function (links) {
-                            render(links);
-                            status.textContent = 'Sync finished at ' + new Date().toLocaleTimeString() + '.';
-                        }, function (response) {
-                            var code = response && response.status ? ' (HTTP ' + response.status + ')' : '';
-                            status.textContent = 'Sync failed' + code + '. See the server log.';
-                            refresh();
-                        })
-                        .then(function () { button.disabled = false; });
+                q('.feedrionOptionsUser').addEventListener('change', function () {
+                    selectedUser = this.value;
+                    renderOptions();
                 });
 
-                page.querySelector('#FeedrionConfigForm').addEventListener('submit', function (e) {
+                q('.feedrionSeriesFilter').addEventListener('input', renderSeriesResults);
+
+                q('.feedrionSyncNow').addEventListener('click', function () {
+                    var b = this;
+                    var status = q('.feedrionSyncStatus');
+                    b.disabled = true;
+                    status.textContent = 'Syncing…';
+                    // The server answers once the pass is over, with the links as they now are.
+                    request('POST', 'Feedrion/Sync').then(function (result) {
+                        links = result || [];
+                        renderLinks();
+                        renderUserPicker();
+                        status.textContent = 'Sync finished at ' + new Date().toLocaleTimeString() + '.';
+                    }, function (response) {
+                        var code = response && response.status ? ' (HTTP ' + response.status + ')' : '';
+                        status.textContent = 'Sync failed' + code + '. See the server log.';
+                        refresh();
+                    }).then(function () { b.disabled = false; });
+                });
+
+                q('.feedrionConfigForm').addEventListener('submit', function (e) {
                     e.preventDefault();
                     Dashboard.showLoadingMsg();
                     ApiClient.getPluginConfiguration(pluginId).then(function (config) {
-                        config.PublicServerUrl = page.querySelector('#PublicServerUrl').value.trim();
-                        config.SyncIntervalMinutes = parseInt(page.querySelector('#SyncIntervalMinutes').value, 10) || 15;
-                        config.ApiBaseUrl = page.querySelector('#ApiBaseUrl').value.trim();
-                        ApiClient.updatePluginConfiguration(pluginId, config)
-                            .then(Dashboard.processPluginConfigurationUpdateResult);
+                        config.PublicServerUrl = q('.txtPublicServerUrl').value.trim();
+                        config.SyncIntervalMinutes = parseInt(q('.txtSyncInterval').value, 10) || 15;
+                        config.ApiBaseUrl = q('.txtApiBaseUrl').value.trim();
+                        ApiClient.updatePluginConfiguration(pluginId, config).then(function (result) {
+                            Dashboard.hideLoadingMsg();
+                            Dashboard.processPluginConfigurationUpdateResult(result);
+                        });
                     });
                     return false;
                 });

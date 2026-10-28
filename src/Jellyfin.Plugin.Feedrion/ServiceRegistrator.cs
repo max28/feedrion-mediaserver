@@ -26,7 +26,10 @@ namespace Jellyfin.Plugin.Feedrion
                     new LinkStore(Path.Combine(plugin.DataFolderPath, "links")),
                     http,
                     () => plugin.Configuration.ApiBaseUrl,
-                    (message, error) => logger.LogWarning(error, "{Message}", message));
+                    (message, error) => logger.LogWarning(error, "{Message}", message))
+                {
+                    IgnoredSeries = () => plugin.Configuration.IgnoredTvdbSeriesIds ?? Array.Empty<int>(),
+                };
             });
             serviceCollection.AddHostedService<FeedrionSyncService>();
         }

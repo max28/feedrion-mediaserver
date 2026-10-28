@@ -13,5 +13,9 @@ namespace Emby.Plugin.Feedrion
         public string PublicServerUrl { get; set; } = "";
 
         public int SyncIntervalMinutes { get; set; } = 15;
+
+        /// <summary>TheTVDB ids of the series nothing is ever sent about, for
+        /// any user: they never reach a Feedrion account from this server.</summary>
+        public int[] IgnoredTvdbSeriesIds { get; set; } = System.Array.Empty<int>();
     }
 }

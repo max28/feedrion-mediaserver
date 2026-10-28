@@ -23,6 +23,7 @@ namespace Jellyfin.Plugin.Feedrion
         private static readonly TimeSpan Debounce = TimeSpan.FromSeconds(10);
 
         private readonly SyncEngine _engine;
+        private readonly JellyfinAdapter _adapter;
         private readonly ISessionManager _sessions;
         private readonly IUserDataManager _userData;
         private readonly ILibraryManager _library;
@@ -31,10 +32,11 @@ namespace Jellyfin.Plugin.Feedrion
         private readonly ConcurrentDictionary<int, byte> _removed = new ConcurrentDictionary<int, byte>();
 
         public FeedrionSyncService(
-            SyncEngine engine, ISessionManager sessions, IUserDataManager userData,
+            SyncEngine engine, JellyfinAdapter adapter, ISessionManager sessions, IUserDataManager userData,
             ILibraryManager library, ILogger<FeedrionSyncService> logger)
         {
             _engine = engine;
+            _adapter = adapter;
             _sessions = sessions;
             _userData = userData;
             _library = library;
@@ -93,7 +95,7 @@ namespace Jellyfin.Plugin.Feedrion
             try
             {
                 if (e.Item is not Episode episode) return;
-                var reference = JellyfinAdapter.ToRef(episode);
+                var reference = _adapter.Reference(episode);
                 if (reference == null) return;
                 var percent = Scrobble.PlayedPercent(e.PlaybackPositionTicks, episode.RunTimeTicks);
                 foreach (var user in e.Users)
@@ -112,7 +114,7 @@ namespace Jellyfin.Plugin.Feedrion
             if (e.SaveReason != UserDataSaveReason.TogglePlayed || e.Item is not Episode episode) return;
             try
             {
-                var reference = JellyfinAdapter.ToRef(episode);
+                var reference = _adapter.Reference(episode);
                 if (reference == null || e.UserData == null) return;
                 _engine.RecordPlayedToggle(JellyfinAdapter.UserKey(e.UserId), reference, e.UserData.Played);
             }
@@ -124,7 +126,16 @@ namespace Jellyfin.Plugin.Feedrion
 
         private void OnItemAdded(object? sender, ItemChangeEventArgs e)
         {
-            var item = JellyfinAdapter.ToLibraryItem(e.Item);
+            LibraryItem? item;
+            try
+            {
+                item = _adapter.Item(e.Item);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Feedrion: could not read an added episode");
+                return;
+            }
             if (item == null) return;
             _removed.TryRemove(item.TvdbEpisodeId, out _);
             _added[item.TvdbEpisodeId] = item;
