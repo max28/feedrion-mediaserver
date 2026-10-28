@@ -104,7 +104,7 @@ def main() -> None:
     manifest = [{
         "guid": JELLYFIN_GUID,
         "name": "Feedrion",
-        "overview": "Sync watched episodes with Feedrion's Series extension.",
+        "overview": "Sync watched episodes with Feedrion's TV shows extension.",
         "description": (
             "Sends the episodes you watch to your Feedrion account, shows which episodes this "
             "server holds, and marks played what you watched elsewhere. Requires Feedrion Premium."

@@ -1,6 +1,6 @@
 # Feedrion for Jellyfin & Emby
 
-Plugins that connect a Jellyfin or Emby server to the **Séries** (TV shows)
+Plugins that connect a Jellyfin or Emby server to the **TV shows**
 extension of [Feedrion](https://feedrion.com).
 
 ## What you get
@@ -72,13 +72,13 @@ Copy `Emby.Plugin.Feedrion.dll` from `feedrion-emby-<version>.zip` into Emby's
 
 ### In the Feedrion app (per reader)
 
-Séries ▸ Settings ▸ Jellyfin / Emby:
+TV shows ▸ Settings ▸ Jellyfin / Emby:
 
 - **Scrobble threshold** — how far an episode must be played to count
   (50–100 %, 90 % by default). "Played to the end" on the server always counts.
 - **Follow the shows in my library** — off by default. On, every series this
   server holds (in the linked libraries, minus the ignored ones) is added to
-  "Mes séries".
+  "My shows".
 
 Settings ▸ Integrations ▸ Connected devices lists the linked servers, lets you
 disconnect one, and opens **Recent activity**: the last 50 changes, both ways,
@@ -94,7 +94,7 @@ linking), then:
 
 - **Add to Feedrion the series this user watches that it does not follow yet**
   — off by default. Off, a watch only counts for series already in
-  "Mes séries"; the others are left out (the history import too). Keep it off
+  "My shows"; the others are left out (the history import too). Keep it off
   on a profile the family shares. To bring in a series anyway, follow it in the
   app first.
 - **Never mark an episode unwatched in Feedrion** — on by default. On, an
@@ -128,7 +128,7 @@ API address (leave the default).
 
 ### Removing a series
 
-A series that should not be in "Mes séries" (one added before these options
+A series that should not be in "My shows" (one added before these options
 existed, say) is removed in the Feedrion app. From then on no media server adds
 it back on its own — following it again in the app is the only way back. To
 stop a series from ever being sent, add it to **Ignored series**.

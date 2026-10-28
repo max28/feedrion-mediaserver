@@ -4,8 +4,8 @@
         <div class="content-primary">
             <h2 class="sectionTitle">Feedrion</h2>
             <p>
-                Watched episodes go to the « Séries » extension of each linked Feedrion account,
-                the episodes this server holds appear there as « available on this server »,
+                Watched episodes go to the "TV shows" extension of each linked Feedrion account,
+                the episodes this server holds appear there as "available on this server",
                 and what was watched elsewhere is marked played here. Only TheTVDB ids leave this
                 server — never a title, a file name or a path. Requires Feedrion Premium.
             </p>
@@ -22,7 +22,7 @@
             <p class="fieldDescription">
                 For each server user: whether a series it watches but does not follow in Feedrion
                 yet gets added there (off by default: on a profile shared with the family, nobody
-                else's shows land in « Mes séries »), whether an episode marked unplayed here is
+                else's shows land in "My shows"), whether an episode marked unplayed here is
                 reported to Feedrion, and which libraries are linked. They can be set before
                 linking. How far an episode must be played is set in the Feedrion app.
             </p>
@@ -51,7 +51,7 @@
             <h3>Ignored series</h3>
             <p class="fieldDescription">
                 Nothing about these series is ever sent to Feedrion, for any user: no watch,
-                no « available on this server ». A series already in « Mes séries » is removed in the
+                no "available on this server". A series already in "My shows" is removed in the
                 Feedrion app — once removed there, this server never adds it back.
             </p>
             <div class="feedrionIgnored"></div>
@@ -67,7 +67,7 @@
             <p class="fieldDescription">
                 The last 50 changes exchanged with Feedrion, newest first, and which way each one
                 went. A watch sent to Feedrion is skipped there when the account does not follow
-                the series — the app's « Activité récente » says so.
+                the series — the app's "Recent activity" says so.
             </p>
             <button is="emby-button" type="button" class="raised button-alt feedrionActivityRefresh"><span>Refresh</span></button>
             <div class="feedrionActivity" style="margin-top: 1em;"></div>
@@ -78,7 +78,7 @@
                 <div class="inputContainer">
                     <input is="emby-input" type="url" class="txtPublicServerUrl" label="Public address of this server" />
                     <div class="fieldDescription">
-                        Optional. Turns « available on this server » into a link that opens the episode here,
+                        Optional. Turns "available on this server" into a link that opens the episode here,
                         in the reader's own browser. Feedrion never connects to it.
                     </div>
                 </div>
