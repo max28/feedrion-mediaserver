@@ -138,7 +138,7 @@ namespace Feedrion.MediaServer.Core
         [JsonPropertyName("addNewShows")] public bool AddNewShows { get; set; }
 
         /// <summary>Never tell Feedrion an episode is unwatched.</summary>
-        [JsonPropertyName("neverUnwatch")] public bool NeverUnwatch { get; set; }
+        [JsonPropertyName("neverUnwatch")] public bool NeverUnwatch { get; set; } = true;
 
         /// <summary>Null: every library, including the ones added later.</summary>
         [JsonPropertyName("libraryIds")] public List<string>? LibraryIds { get; set; }
