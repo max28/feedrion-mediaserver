@@ -133,7 +133,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select'], function (loadin
             var add = checkbox('Add to Feedrion the series this user watches that it does not follow yet',
                 pick(link, 'addNewShows'));
             box.appendChild(add.node);
-            box.appendChild(el('div', 'Off: only the series already in « Mes séries » get their episodes marked watched.',
+            box.appendChild(el('div', 'Off: only the series already in "My shows" get their episodes marked watched.',
                 'fieldDescription'));
             var never = checkbox('Never mark an episode unwatched in Feedrion', pick(link, 'neverUnwatch'));
             never.node.style.marginTop = '.8em';
