@@ -55,7 +55,10 @@ message and comment as if it already were.
   logic line for line; change both.
 - **The threshold belongs to the reader**, read from
   `GET /integrations/v1/mediaserver/config`; the server's own "played to
-  completion" always counts.
+  completion" always counts — and so does its own **"played" at the end of a
+  playback** (`UserDataSaved` with `PlaybackFinished` and `Played`,
+  `SyncEngine.RecordPlayedByServer`): a stop event can carry no position, or
+  one the server already reset to 0, and the watch was then never sent.
 - **Echo suppression**: a watch pulled from Feedrion and marked played here
   must not be sent back (5-minute window, set BEFORE touching the server).
 - **The last event about an episode wins** in the queue; the queue is bounded.

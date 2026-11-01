@@ -185,11 +185,23 @@ namespace Emby.Plugin.Feedrion
 
         private void OnUserDataSaved(object? sender, UserDataSaveEventArgs e)
         {
-            if (e.SaveReason != UserDataSaveReason.TogglePlayed || !(e.Item is Episode episode) || e.User == null) return;
+            // The reader's own « mark played / unplayed », and Emby's own
+            // « played » at the end of a playback — a stop event can carry no
+            // position, or one Emby already reset to 0 (owner, 01/11/2026:
+            // « j'ai regardé un épisode sur Emby et pourtant ça n'a pas envoyé
+            // le vu ; le marquer non vu puis vu l'a fait »).
+            var finished = e.SaveReason == UserDataSaveReason.PlaybackFinished;
+            if ((e.SaveReason != UserDataSaveReason.TogglePlayed && !finished)
+                || !(e.Item is Episode episode) || e.User == null) return;
             try
             {
                 var reference = Adapter.Reference(episode);
                 if (reference == null || e.UserData == null) return;
+                if (finished)
+                {
+                    if (e.UserData.Played) Engine.RecordPlayedByServer(EmbyAdapter.UserKey(e.User), reference);
+                    return;
+                }
                 Engine.RecordPlayedToggle(EmbyAdapter.UserKey(e.User), reference, e.UserData.Played);
             }
             catch (Exception ex)

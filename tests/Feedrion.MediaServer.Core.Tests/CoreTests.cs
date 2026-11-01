@@ -114,6 +114,22 @@ namespace Feedrion.MediaServer.Core.Tests
         }
 
         [Fact]
+        public async Task A_playback_the_server_marked_played_is_sent_whatever_its_percent()
+        {
+            var (engine, store) = Engine();
+            // The stop event said 0 % (position reset by the server): not a watch.
+            engine.RecordPlayback(UserId, Ep(61), 0, playedToCompletion: false);
+            Assert.Empty(store.Get(UserId)!.PendingEvents);
+            // …but the server's own « played » at the end of the playback is.
+            engine.RecordPlayedByServer(UserId, Ep(61));
+            await engine.RunOnceAsync(CancellationToken.None);
+            var sent = _api.EventBatches.Single().Single();
+            Assert.Equal(61, sent.TvdbEpisodeId);
+            Assert.Equal(WatchEvent.Watched, sent.Type);
+            Assert.Null(sent.Percent);
+        }
+
+        [Fact]
         public async Task A_free_account_keeps_its_events_and_sends_none()
         {
             var (engine, store) = Engine();

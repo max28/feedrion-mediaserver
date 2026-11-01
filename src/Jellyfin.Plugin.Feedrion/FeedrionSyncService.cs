@@ -109,13 +109,23 @@ namespace Jellyfin.Plugin.Feedrion
 
         private void OnUserDataSaved(object? sender, UserDataSaveEventArgs e)
         {
-            // Only the reader's own « mark played / unplayed ». A finished
-            // playback arrives through PlaybackStopped, with its percent.
-            if (e.SaveReason != UserDataSaveReason.TogglePlayed || e.Item is not Episode episode) return;
+            // The reader's own « mark played / unplayed », and the server's
+            // own « played » at the end of a playback: a stop event can carry
+            // no position, or one already reset to 0, and the episode then
+            // never reached Feedrion although the server shows it watched.
+            if (e.Item is not Episode episode) return;
+            var finished = e.SaveReason == UserDataSaveReason.PlaybackFinished;
+            if (e.SaveReason != UserDataSaveReason.TogglePlayed && !finished) return;
             try
             {
                 var reference = _adapter.Reference(episode);
                 if (reference == null || e.UserData == null) return;
+                if (finished)
+                {
+                    if (e.UserData.Played)
+                        _engine.RecordPlayedByServer(JellyfinAdapter.UserKey(e.UserId), reference);
+                    return;
+                }
                 _engine.RecordPlayedToggle(JellyfinAdapter.UserKey(e.UserId), reference, e.UserData.Played);
             }
             catch (Exception ex)
