@@ -240,6 +240,16 @@ namespace Feedrion.MediaServer.Core
             Enqueue(state, Event(WatchEvent.Watched, episode, playedToCompletion ? (double?)null : percent));
         }
 
+        /// <summary>The SERVER marked an episode played at the end of a playback
+        /// (its own « played » verdict: past its resume threshold, credits
+        /// skipped, the next episode started by auto-play). Counted whatever
+        /// percent the stop event carried: some clients stop without a
+        /// position, and the server resets the position of an item it just
+        /// marked played — a percent read then says 0 while the episode was
+        /// watched to the end. The server already decided; Feedrion follows.</summary>
+        public void RecordPlayedByServer(string serverUserId, EpisodeRef episode) =>
+            RecordPlayback(serverUserId, episode, null, playedToCompletion: true);
+
         /// <summary>The reader marked an episode played / unplayed on the server.</summary>
         public void RecordPlayedToggle(string serverUserId, EpisodeRef episode, bool played)
         {
