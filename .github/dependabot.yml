@@ -2,12 +2,22 @@ version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
-    schedule: { interval: monthly }
+    schedule:
+      # Same slot as the main Feedrion repository: one review session a week.
+      interval: weekly
+      day: friday
+      time: "22:00"
+      timezone: Europe/Paris
   # The server SDKs (Jellyfin.Controller, MediaBrowser.Server.Core) define
   # which servers the plugins load on: bump them deliberately, never by bot.
   - package-ecosystem: nuget
     directory: /
-    schedule: { interval: monthly }
+    schedule:
+      # Same slot as the main Feedrion repository: one review session a week.
+      interval: weekly
+      day: friday
+      time: "22:00"
+      timezone: Europe/Paris
     ignore:
       - dependency-name: "Jellyfin.*"
       - dependency-name: "MediaBrowser.*"
