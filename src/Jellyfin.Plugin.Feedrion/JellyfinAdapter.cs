@@ -8,6 +8,7 @@ using Jellyfin.Data.Enums;
 using Jellyfin.Database.Implementations.Entities;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Entities;
@@ -16,7 +17,7 @@ namespace Jellyfin.Plugin.Feedrion
 {
     /// <summary>The engine's view of Jellyfin. Everything that leaves is a TheTVDB
     /// id or a Jellyfin item id — never a title, a file name or a path.</summary>
-    public sealed class JellyfinAdapter : IMediaServerAdapter
+    public sealed class JellyfinAdapter : IMediaServerAdapter, IMovieAdapter
     {
         private readonly ILibraryManager _library;
         private readonly IUserManager _users;
@@ -282,6 +283,154 @@ namespace Jellyfin.Plugin.Feedrion
                 if (item.Season.HasValue && item.Number.HasValue)
                     index["s" + item.TvdbSeriesId + ":" + item.Season + ":" + item.Number] = item;
             }
+            return index;
+        }
+
+        // ── Films ─────────────────────────────────────────────────────────────
+
+        private Dictionary<string, MovieLibraryItem>? _movieIndex;
+        private DateTimeOffset _movieIndexedAt;
+
+        /// <summary>A film's ids — TheTVDB, IMDb, TMDB, whichever Jellyfin
+        /// matched — or null when it has none (nothing to match it on).</summary>
+        public static MovieRef? ToMovieRef(BaseItem item)
+        {
+            if (item is not Movie movie) return null;
+            var reference = new MovieRef
+            {
+                TvdbId = ParseId(movie.GetProviderId(MetadataProvider.Tvdb)),
+                ImdbId = Clean(movie.GetProviderId(MetadataProvider.Imdb)),
+                TmdbId = Clean(movie.GetProviderId(MetadataProvider.Tmdb)),
+                Name = movie.Name,
+            };
+            return reference.Key == null ? null : reference;
+        }
+
+        private static string? Clean(string? raw) => string.IsNullOrWhiteSpace(raw) ? null : raw.Trim();
+
+        private static MovieLibraryItem? ToMovieItem(BaseItem item)
+        {
+            var reference = ToMovieRef(item);
+            if (reference == null) return null;
+            return new MovieLibraryItem
+            {
+                ItemId = item.Id.ToString("N", CultureInfo.InvariantCulture),
+                TvdbId = reference.TvdbId,
+                ImdbId = reference.ImdbId,
+                TmdbId = reference.TmdbId,
+                Name = reference.Name,
+            };
+        }
+
+        /// <summary>[ToMovieRef], with the libraries the film sits in.</summary>
+        public MovieRef? MovieReference(BaseItem item)
+        {
+            var reference = ToMovieRef(item);
+            if (reference != null) reference.LibraryIds = Compute(item);
+            return reference;
+        }
+
+        /// <summary>A film as the library change events hand it over.</summary>
+        public MovieLibraryItem? MovieItem(BaseItem item)
+        {
+            var movieItem = ToMovieItem(item);
+            if (movieItem != null) movieItem.LibraryIds = Compute(item);
+            return movieItem;
+        }
+
+        private IReadOnlyList<BaseItem> MovieItems(User? user, bool? played) => _library.GetItemList(
+            new InternalItemsQuery(user)
+            {
+                IncludeItemTypes = new[] { BaseItemKind.Movie },
+                IsVirtualItem = false,
+                Recursive = true,
+                IsPlayed = played,
+            });
+
+        public IReadOnlyList<MovieLibraryItem> ListLibraryMovies()
+        {
+            var items = new List<MovieLibraryItem>();
+            foreach (var movie in MovieItems(null, null))
+            {
+                var item = ToMovieItem(movie);
+                if (item == null) continue;
+                item.LibraryIds = Compute(movie);
+                items.Add(item);
+            }
+            lock (_gate)
+            {
+                _movieIndex = BuildMovieIndex(items);
+                _movieIndexedAt = DateTimeOffset.UtcNow;
+            }
+            return items;
+        }
+
+        public IReadOnlyList<MovieWatchEvent> ListPlayedMovies(string serverUserId)
+        {
+            var user = FindUser(serverUserId);
+            if (user == null) return Array.Empty<MovieWatchEvent>();
+            var events = new List<MovieWatchEvent>();
+            foreach (var item in MovieItems(user, true))
+            {
+                var reference = ToMovieRef(item);
+                if (reference == null) continue;
+                var data = _userData.GetUserData(user, item);
+                events.Add(new MovieWatchEvent
+                {
+                    Type = WatchEvent.Watched,
+                    TvdbId = reference.TvdbId,
+                    ImdbId = reference.ImdbId,
+                    TmdbId = reference.TmdbId,
+                    Name = reference.Name,
+                    At = data?.LastPlayedDate is DateTime at ? new DateTimeOffset(DateTime.SpecifyKind(at, DateTimeKind.Utc)) : null,
+                    LibraryIds = Compute(item),
+                });
+            }
+            return events.OrderBy(e => e.At ?? DateTimeOffset.MinValue).ToList();
+        }
+
+        public MovieLibraryItem? MarkMoviePlayed(string serverUserId, RemoteMovieWatch watch, Func<IReadOnlyList<string>?, bool> covers)
+        {
+            var user = FindUser(serverUserId);
+            if (user == null) return null;
+            var held = LookupMovie(watch);
+            if (held == null || !covers(held.LibraryIds) || !Guid.TryParse(held.ItemId, out var itemId)) return null;
+            var item = _library.GetItemById(itemId);
+            if (item == null) return null;
+            var data = _userData.GetUserData(user, item);
+            if (data == null || data.Played) return null;
+            data.Played = true;
+            data.PlayCount = Math.Max(1, data.PlayCount);
+            data.LastPlayedDate = watch.WatchedAt.UtcDateTime;
+            _userData.SaveUserData(user, item, data, UserDataSaveReason.TogglePlayed, CancellationToken.None);
+            return held;
+        }
+
+        private MovieLibraryItem? LookupMovie(RemoteMovieWatch watch)
+        {
+            Dictionary<string, MovieLibraryItem>? index;
+            lock (_gate)
+            {
+                index = _movieIndex;
+                if (index == null || DateTimeOffset.UtcNow - _movieIndexedAt > TimeSpan.FromMinutes(10)) index = null;
+            }
+            if (index == null)
+            {
+                ListLibraryMovies();
+                lock (_gate) index = _movieIndex;
+            }
+            if (index == null) return null;
+            foreach (var key in MovieIds.AllKeys(watch.TvdbId, watch.ImdbId, watch.TmdbId))
+                if (index.TryGetValue(key, out var found)) return found;
+            return null;
+        }
+
+        private static Dictionary<string, MovieLibraryItem> BuildMovieIndex(IEnumerable<MovieLibraryItem> items)
+        {
+            var index = new Dictionary<string, MovieLibraryItem>(StringComparer.Ordinal);
+            foreach (var item in items)
+                foreach (var key in MovieIds.AllKeys(item.TvdbId, item.ImdbId, item.TmdbId))
+                    index[key] = item;
             return index;
         }
 

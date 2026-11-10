@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Feedrion.MediaServer.Core;
 using MediaBrowser.Controller;
+using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Plugins;
@@ -32,6 +33,8 @@ namespace Emby.Plugin.Feedrion
         private readonly CancellationTokenSource _stop = new CancellationTokenSource();
         private readonly ConcurrentDictionary<int, LibraryItem> _added = new ConcurrentDictionary<int, LibraryItem>();
         private readonly ConcurrentDictionary<int, byte> _removed = new ConcurrentDictionary<int, byte>();
+        private readonly ConcurrentDictionary<string, MovieLibraryItem> _addedMovies = new ConcurrentDictionary<string, MovieLibraryItem>();
+        private readonly ConcurrentDictionary<string, byte> _removedMovies = new ConcurrentDictionary<string, byte>();
         private HttpClient? _http;
         private bool _hooked;
 
@@ -170,6 +173,15 @@ namespace Emby.Plugin.Feedrion
         {
             try
             {
+                if (e.Item is Movie movie)
+                {
+                    var film = Adapter.MovieReference(movie);
+                    if (film == null) return;
+                    var played = Scrobble.PlayedPercent(e.PlaybackPositionTicks, movie.RunTimeTicks);
+                    foreach (var user in e.Users)
+                        Engine.RecordMoviePlayback(EmbyAdapter.UserKey(user), film, played, e.PlayedToCompletion);
+                    return;
+                }
                 if (!(e.Item is Episode episode)) return;
                 var reference = Adapter.Reference(episode);
                 if (reference == null) return;
@@ -191,8 +203,28 @@ namespace Emby.Plugin.Feedrion
             // « j'ai regardé un épisode sur Emby et pourtant ça n'a pas envoyé
             // le vu ; le marquer non vu puis vu l'a fait »).
             var finished = e.SaveReason == UserDataSaveReason.PlaybackFinished;
-            if ((e.SaveReason != UserDataSaveReason.TogglePlayed && !finished)
-                || !(e.Item is Episode episode) || e.User == null) return;
+            if ((e.SaveReason != UserDataSaveReason.TogglePlayed && !finished) || e.User == null) return;
+            if (e.Item is Movie movie)
+            {
+                try
+                {
+                    var film = Adapter.MovieReference(movie);
+                    if (film == null || e.UserData == null) return;
+                    var key = EmbyAdapter.UserKey(e.User);
+                    if (finished)
+                    {
+                        if (e.UserData.Played) Engine.RecordMoviePlayedByServer(key, film);
+                        return;
+                    }
+                    Engine.RecordMoviePlayedToggle(key, film, e.UserData.Played);
+                }
+                catch (Exception ex)
+                {
+                    _logger.ErrorException("Feedrion: could not record a played mark", ex);
+                }
+                return;
+            }
+            if (!(e.Item is Episode episode)) return;
             try
             {
                 var reference = Adapter.Reference(episode);
@@ -212,6 +244,21 @@ namespace Emby.Plugin.Feedrion
 
         private void OnItemAdded(object? sender, ItemChangeEventArgs e)
         {
+            if (e.Item is Movie)
+            {
+                try
+                {
+                    var film = Adapter.MovieItem(e.Item);
+                    if (film == null) return;
+                    _removedMovies.TryRemove(film.ItemId, out _);
+                    _addedMovies[film.ItemId] = film;
+                }
+                catch (Exception ex)
+                {
+                    _logger.ErrorException("Feedrion: could not read an added film", ex);
+                }
+                return;
+            }
             LibraryItem? item;
             try
             {
@@ -229,6 +276,13 @@ namespace Emby.Plugin.Feedrion
 
         private void OnItemRemoved(object? sender, ItemChangeEventArgs e)
         {
+            if (e.Item is Movie)
+            {
+                var itemId = e.Item.InternalId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                _addedMovies.TryRemove(itemId, out _);
+                _removedMovies[itemId] = 0;
+                return;
+            }
             var reference = EmbyAdapter.ToRef(e.Item);
             if (reference?.TvdbEpisodeId == null) return;
             _added.TryRemove(reference.TvdbEpisodeId.Value, out _);
@@ -244,6 +298,13 @@ namespace Emby.Plugin.Feedrion
             foreach (var key in _removed.Keys)
                 if (_removed.TryRemove(key, out _)) removed.Add(key);
             Engine.RecordLibraryChange(added, removed);
+            var addedMovies = new List<MovieLibraryItem>();
+            foreach (var key in _addedMovies.Keys)
+                if (_addedMovies.TryRemove(key, out var film)) addedMovies.Add(film);
+            var removedMovies = new List<string>();
+            foreach (var key in _removedMovies.Keys)
+                if (_removedMovies.TryRemove(key, out _)) removedMovies.Add(key);
+            Engine.RecordMovieLibraryChange(addedMovies, removedMovies);
         }
     }
 }

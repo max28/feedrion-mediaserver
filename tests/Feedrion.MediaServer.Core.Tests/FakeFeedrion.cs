@@ -28,6 +28,13 @@ namespace Feedrion.MediaServer.Core.Tests
         public List<LibraryBatch> LibraryBatches { get; } = new List<LibraryBatch>();
         public string PairStatus { get; set; } = "pending";
 
+        // Films. [MoviesSupported] false: an API from before films (404).
+        public bool MoviesSupported { get; set; } = true;
+        public List<RemoteMovieWatch> MovieWatches { get; } = new List<RemoteMovieWatch>();
+        public List<List<MovieWatchEvent>> MovieEventBatches { get; } = new List<List<MovieWatchEvent>>();
+        public List<bool?> MovieBatchAddNewMovies { get; } = new List<bool?>();
+        public List<MovieLibraryBatch> MovieLibraryBatches { get; } = new List<MovieLibraryBatch>();
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             var body = request.Content == null ? null : await request.Content.ReadAsStringAsync(ct);
@@ -77,6 +84,28 @@ namespace Feedrion.MediaServer.Core.Tests
                 Watches.Clear();
                 return Json(new { watches = page, cursor = "next|" + page.Count, more = false });
             }
+            if (path.StartsWith("/api/integrations/v1/mediaserver/movies/"))
+            {
+                if (!MoviesSupported) return Status(404, "Not Found");
+                if (path.StartsWith("/api/integrations/v1/mediaserver/movies/events"))
+                {
+                    var doc = JsonDocument.Parse(body!);
+                    MovieEventBatches.Add(JsonSerializer.Deserialize<List<MovieWatchEvent>>(doc.RootElement.GetProperty("events").GetRawText())!);
+                    MovieBatchAddNewMovies.Add(doc.RootElement.TryGetProperty("add_new_movies", out var add) ? add.GetBoolean() : (bool?)null);
+                    return Json(new { accepted = 1, ignored = 0 });
+                }
+                if (path.StartsWith("/api/integrations/v1/mediaserver/movies/library"))
+                {
+                    MovieLibraryBatches.Add(JsonSerializer.Deserialize<MovieLibraryBatch>(body!)!);
+                    return Json(new { stored = 1, removed = 0, followed = 0 });
+                }
+                if (path.StartsWith("/api/integrations/v1/mediaserver/movies/watched"))
+                {
+                    var page = MovieWatches.ToList();
+                    MovieWatches.Clear();
+                    return Json(new { watches = page, cursor = "movies|" + page.Count, more = false });
+                }
+            }
             if (path.StartsWith("/api/integrations/v1/disconnect")) return new HttpResponseMessage(HttpStatusCode.NoContent);
             return Status(404, "not_found");
         }
@@ -92,8 +121,27 @@ namespace Feedrion.MediaServer.Core.Tests
         };
     }
 
-    public sealed class FakeAdapter : IMediaServerAdapter
+    public sealed class FakeAdapter : IMediaServerAdapter, IMovieAdapter
     {
+        // Films.
+        public List<MovieLibraryItem> MovieLibrary { get; } = new List<MovieLibraryItem>();
+        public List<MovieWatchEvent> MovieHistory { get; } = new List<MovieWatchEvent>();
+        public List<RemoteMovieWatch> MoviesMarked { get; } = new List<RemoteMovieWatch>();
+
+        public IReadOnlyList<MovieLibraryItem> ListLibraryMovies() => MovieLibrary;
+        public IReadOnlyList<MovieWatchEvent> ListPlayedMovies(string serverUserId) => MovieHistory;
+
+        public MovieLibraryItem? MarkMoviePlayed(string serverUserId, RemoteMovieWatch watch, Func<IReadOnlyList<string>?, bool> covers)
+        {
+            var item = MovieLibrary.FirstOrDefault(m =>
+                (m.TvdbId.HasValue && m.TvdbId == watch.TvdbId)
+                || (m.ImdbId != null && m.ImdbId == watch.ImdbId)
+                || (m.TmdbId != null && m.TmdbId == watch.TmdbId));
+            if (item == null || !covers(item.LibraryIds)) return null;
+            MoviesMarked.Add(watch);
+            return item;
+        }
+
         public string Kind => "jellyfin";
         public List<LibraryItem> Library { get; } = new List<LibraryItem>();
         public List<WatchEvent> History { get; } = new List<WatchEvent>();
@@ -102,6 +150,7 @@ namespace Feedrion.MediaServer.Core.Tests
         {
             new MediaLibrary { Id = "lib-shows", Name = "Shows", Type = "tvshows" },
             new MediaLibrary { Id = "lib-kids", Name = "Kids", Type = "tvshows" },
+            new MediaLibrary { Id = "lib-films", Name = "Films", Type = "movies" },
         };
 
         public ServerInfo DescribeServer() => new ServerInfo { ServerId = "srv", ServerName = "Salon", ClientVersion = "test" };

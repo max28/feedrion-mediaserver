@@ -47,6 +47,11 @@ namespace Feedrion.MediaServer.Core
         /// not undone by a server whose profile someone else uses.</summary>
         [JsonPropertyName("never_unwatch")] public bool NeverUnwatch { get; set; } = true;
 
+        /// <summary>Whether a watch of a film the account does not follow yet
+        /// adds it to « Films ». Off by default, for the same reason as the
+        /// shows.</summary>
+        [JsonPropertyName("add_new_movies")] public bool AddNewMovies { get; set; }
+
         // Progress.
         [JsonPropertyName("watch_cursor")] public string? WatchCursor { get; set; }
         [JsonPropertyName("import_done")] public bool ImportDone { get; set; }
@@ -58,6 +63,18 @@ namespace Feedrion.MediaServer.Core
         [JsonPropertyName("pending_events")] public List<WatchEvent> PendingEvents { get; set; } = new List<WatchEvent>();
         [JsonPropertyName("pending_library_added")] public List<LibraryItem> PendingLibraryAdded { get; set; } = new List<LibraryItem>();
         [JsonPropertyName("pending_library_removed")] public List<int> PendingLibraryRemoved { get; set; } = new List<int>();
+
+        // Films (Feedrion's « Films » extension): the same progress and
+        // queues as the episodes, kept apart so neither waits on the other.
+        [JsonPropertyName("movie_watch_cursor")] public string? MovieWatchCursor { get; set; }
+        [JsonPropertyName("movie_import_done")] public bool MovieImportDone { get; set; }
+        [JsonPropertyName("movie_library_full_at")] public DateTimeOffset? MovieLibraryFullAt { get; set; }
+        /// <summary>An API from before films answered 404: films wait a day
+        /// before being tried again, and nothing queued is dropped.</summary>
+        [JsonPropertyName("movies_unsupported_at")] public DateTimeOffset? MoviesUnsupportedAt { get; set; }
+        [JsonPropertyName("pending_movie_events")] public List<MovieWatchEvent> PendingMovieEvents { get; set; } = new List<MovieWatchEvent>();
+        [JsonPropertyName("pending_movie_library_added")] public List<MovieLibraryItem> PendingMovieLibraryAdded { get; set; } = new List<MovieLibraryItem>();
+        [JsonPropertyName("pending_movie_library_removed")] public List<string> PendingMovieLibraryRemoved { get; set; } = new List<string>();
 
         [JsonIgnore] public bool IsLinked => !string.IsNullOrEmpty(RefreshToken);
 
@@ -81,6 +98,37 @@ namespace Feedrion.MediaServer.Core
             PendingEvents.Add(e);
             if (PendingEvents.Count > MaxPendingEvents)
                 PendingEvents.RemoveRange(0, PendingEvents.Count - MaxPendingEvents);
+        }
+
+        /// <summary>Queue a film event; the last word about a film decides.</summary>
+        public void EnqueueMovie(MovieWatchEvent e)
+        {
+            var key = e.MovieKey;
+            PendingMovieEvents.RemoveAll(p => p.MovieKey == key);
+            PendingMovieEvents.Add(e);
+            if (PendingMovieEvents.Count > MaxPendingEvents)
+                PendingMovieEvents.RemoveRange(0, PendingMovieEvents.Count - MaxPendingEvents);
+        }
+
+        public void EnqueueMovieLibrary(IEnumerable<MovieLibraryItem> added, IEnumerable<string> removed)
+        {
+            foreach (var item in added)
+            {
+                PendingMovieLibraryRemoved.Remove(item.ItemId);
+                PendingMovieLibraryAdded.RemoveAll(a => a.ItemId == item.ItemId);
+                PendingMovieLibraryAdded.Add(item);
+            }
+            foreach (var id in removed)
+            {
+                PendingMovieLibraryAdded.RemoveAll(a => a.ItemId == id);
+                if (!PendingMovieLibraryRemoved.Contains(id)) PendingMovieLibraryRemoved.Add(id);
+            }
+            if (PendingMovieLibraryAdded.Count > MaxPendingLibrary)
+            {
+                PendingMovieLibraryAdded.Clear();
+                PendingMovieLibraryRemoved.Clear();
+                MovieLibraryFullAt = null;
+            }
         }
 
         public void EnqueueLibrary(IEnumerable<LibraryItem> added, IEnumerable<int> removed)

@@ -69,7 +69,7 @@ namespace Feedrion.MediaServer.Core
     }
 
     /// <summary>The sync loop, shared by both plugins.</summary>
-    public sealed class SyncEngine
+    public sealed partial class SyncEngine
     {
         public const int EventsPerCall = 500;
         public const int LibraryPerCall = 5000;
@@ -187,6 +187,9 @@ namespace Feedrion.MediaServer.Core
                     state.ImportDone = false;
                     state.ServerInfoSent = null;
                     state.LibraryFullAt = null;
+                    state.MovieWatchCursor = null;
+                    state.MovieImportDone = false;
+                    state.MovieLibraryFullAt = null;
                     _store.Save(state);
                     _pending.TryRemove(serverUserId, out _);
                     Wake();
@@ -300,7 +303,17 @@ namespace Feedrion.MediaServer.Core
                 if (state.ServerUserName == null) state.ServerUserName = serverUserName;
                 var changed = state.AddNewShows != settings.AddNewShows
                     || !SameLibraries(state.LibraryIds, libraries);
+                var moviesChanged = state.AddNewMovies != settings.AddNewMovies
+                    || !SameLibraries(state.LibraryIds, libraries);
                 state.AddNewShows = settings.AddNewShows;
+                state.AddNewMovies = settings.AddNewMovies;
+                if (moviesChanged)
+                {
+                    state.MovieImportDone = false;
+                    state.MovieLibraryFullAt = null;
+                    state.PendingMovieLibraryAdded.Clear();
+                    state.PendingMovieLibraryRemoved.Clear();
+                }
                 state.LibraryIds = libraries;
                 // Not a reason to send anything again: it only filters what comes.
                 state.NeverUnwatch = settings.NeverUnwatch;
@@ -417,6 +430,8 @@ namespace Feedrion.MediaServer.Core
                 foreach (var state in _store.All().Where(s => s.IsLinked))
                 {
                     state.LibraryFullAt = null;
+                    state.MovieLibraryFullAt = null;
+                    state.MoviesUnsupportedAt = null;
                     _store.Save(state);
                 }
             }
@@ -519,6 +534,7 @@ namespace Feedrion.MediaServer.Core
             await FlushEventsAsync(client, state, ct).ConfigureAwait(false);
             await SyncLibraryAsync(client, state, ct).ConfigureAwait(false);
             await PullWatchesAsync(client, state, ct).ConfigureAwait(false);
+            await SyncMoviesAsync(client, state, config, ct).ConfigureAwait(false);
         }
 
         private async Task FlushEventsAsync(FeedrionClient client, LinkState state, CancellationToken ct)
