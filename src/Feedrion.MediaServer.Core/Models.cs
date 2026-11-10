@@ -137,6 +137,10 @@ namespace Feedrion.MediaServer.Core
     {
         [JsonPropertyName("addNewShows")] public bool AddNewShows { get; set; }
 
+        /// <summary>A watch of a film the Feedrion account does not follow
+        /// adds it. Off by default, like the shows.</summary>
+        [JsonPropertyName("addNewMovies")] public bool AddNewMovies { get; set; }
+
         /// <summary>Never tell Feedrion an episode is unwatched.</summary>
         [JsonPropertyName("neverUnwatch")] public bool NeverUnwatch { get; set; } = true;
 
@@ -171,6 +175,89 @@ namespace Feedrion.MediaServer.Core
     public sealed class WatchesPage
     {
         [JsonPropertyName("watches")] public List<RemoteWatch> Watches { get; set; } = new List<RemoteWatch>();
+        [JsonPropertyName("cursor")] public string Cursor { get; set; } = "";
+        [JsonPropertyName("more")] public bool More { get; set; }
+    }
+
+    // ── Films (Feedrion's « Films » extension) ─────────────────────────────────
+    //
+    // A server does not always know a film by TheTVDB (Jellyfin matches films
+    // on TMDB and IMDb by default), so a film carries whichever of the three
+    // ids it has — at least one. Feedrion resolves them; nothing else leaves.
+
+    /// <summary>The ids of one film, and the one key the engine files it under.</summary>
+    public static class MovieIds
+    {
+        public static string? Key(int? tvdb, string? imdb, string? tmdb)
+        {
+            if (tvdb.HasValue && tvdb.Value > 0) return "t" + tvdb.Value;
+            if (!string.IsNullOrEmpty(imdb)) return "i" + imdb!.ToLowerInvariant();
+            if (!string.IsNullOrEmpty(tmdb)) return "d" + tmdb;
+            return null;
+        }
+
+        /// <summary>Every key the film answers to: a watch pulled by one id may
+        /// come back from the server under another.</summary>
+        public static IEnumerable<string> AllKeys(int? tvdb, string? imdb, string? tmdb)
+        {
+            if (tvdb.HasValue && tvdb.Value > 0) yield return "t" + tvdb.Value;
+            if (!string.IsNullOrEmpty(imdb)) yield return "i" + imdb!.ToLowerInvariant();
+            if (!string.IsNullOrEmpty(tmdb)) yield return "d" + tmdb;
+        }
+    }
+
+    /// <summary>A played or un-played film, by its ids — never a title or a path.</summary>
+    public sealed class MovieWatchEvent
+    {
+        [JsonPropertyName("type")] public string Type { get; set; } = WatchEvent.Watched;
+        [JsonPropertyName("tvdb_id")] public int? TvdbId { get; set; }
+        [JsonPropertyName("imdb_id")] public string? ImdbId { get; set; }
+        [JsonPropertyName("tmdb_id")] public string? TmdbId { get; set; }
+        [JsonPropertyName("at")] public DateTimeOffset? At { get; set; }
+        [JsonPropertyName("percent")] public double? Percent { get; set; }
+
+        /// <summary>The libraries the film sits in. Never sent, never stored.</summary>
+        [JsonIgnore] public IReadOnlyList<string>? LibraryIds { get; set; }
+
+        /// <summary>The server's own title, for the local activity log only.</summary>
+        [JsonIgnore] public string? Name { get; set; }
+
+        [JsonIgnore] public string MovieKey => MovieIds.Key(TvdbId, ImdbId, TmdbId) ?? "";
+    }
+
+    /// <summary>One film the server holds: its ids, and the server's own item id
+    /// that makes « Voir sur Jellyfin » open the right page.</summary>
+    public sealed class MovieLibraryItem
+    {
+        [JsonPropertyName("item_id")] public string ItemId { get; set; } = "";
+        [JsonPropertyName("tvdb_id")] public int? TvdbId { get; set; }
+        [JsonPropertyName("imdb_id")] public string? ImdbId { get; set; }
+        [JsonPropertyName("tmdb_id")] public string? TmdbId { get; set; }
+
+        [JsonIgnore] public IReadOnlyList<string>? LibraryIds { get; set; }
+        [JsonIgnore] public string? Name { get; set; }
+    }
+
+    public sealed class MovieLibraryBatch
+    {
+        [JsonPropertyName("items")] public List<MovieLibraryItem> Items { get; set; } = new List<MovieLibraryItem>();
+        /// <summary>Server item ids no longer there.</summary>
+        [JsonPropertyName("removed")] public List<string> Removed { get; set; } = new List<string>();
+        [JsonPropertyName("generation")] public string? Generation { get; set; }
+        [JsonPropertyName("final")] public bool Final { get; set; }
+    }
+
+    public sealed class RemoteMovieWatch
+    {
+        [JsonPropertyName("tvdb_id")] public int TvdbId { get; set; }
+        [JsonPropertyName("imdb_id")] public string? ImdbId { get; set; }
+        [JsonPropertyName("tmdb_id")] public string? TmdbId { get; set; }
+        [JsonPropertyName("watched_at")] public DateTimeOffset WatchedAt { get; set; }
+    }
+
+    public sealed class MovieWatchesPage
+    {
+        [JsonPropertyName("watches")] public List<RemoteMovieWatch> Watches { get; set; } = new List<RemoteMovieWatch>();
         [JsonPropertyName("cursor")] public string Cursor { get; set; } = "";
         [JsonPropertyName("more")] public bool More { get; set; }
     }

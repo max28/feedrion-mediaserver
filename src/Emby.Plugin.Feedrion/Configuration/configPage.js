@@ -7,9 +7,9 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select'], function (loadin
     // comma-separated strings.
     var SERVER_NAME = 'Emby';
 
-    function settingsBody(addNewShows, neverUnwatch, allLibraries, ids) {
+    function settingsBody(addNewShows, addNewMovies, neverUnwatch, allLibraries, ids) {
         return {
-            AddNewShows: addNewShows, NeverUnwatch: neverUnwatch,
+            AddNewShows: addNewShows, AddNewMovies: addNewMovies, NeverUnwatch: neverUnwatch,
             AllLibraries: allLibraries, LibraryIds: ids.join(',')
         };
     }
@@ -135,6 +135,12 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select'], function (loadin
             box.appendChild(add.node);
             box.appendChild(el('div', 'Off: only the series already in "My shows" get their episodes marked watched.',
                 'fieldDescription'));
+            var addMovies = checkbox('Add to Feedrion the films this user watches that it does not follow yet',
+                pick(link, 'addNewMovies'));
+            addMovies.node.style.marginTop = '.8em';
+            box.appendChild(addMovies.node);
+            box.appendChild(el('div', 'Off: only the films already in Feedrion\'s "Films" get marked watched. Films are Premium.',
+                'fieldDescription'));
             var never = checkbox('Never mark an episode unwatched in Feedrion', pick(link, 'neverUnwatch'));
             never.node.style.marginTop = '.8em';
             box.appendChild(never.node);
@@ -169,7 +175,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-select'], function (loadin
                 var ids = boxes.filter(function (b) { return b.checked; }).map(function (b) { return b.value; });
                 save.disabled = true;
                 request('POST', 'Feedrion/Links/' + encodeURIComponent(pick(link, 'userId')) + '/Settings',
-                    settingsBody(add.input.checked, never.input.checked, all.input.checked, ids))
+                    settingsBody(add.input.checked, addMovies.input.checked, never.input.checked, all.input.checked, ids))
                     .then(function (updated) {
                         if (updated) {
                             links = links.map(function (l) { return pick(l, 'userId') === pick(updated, 'userId') ? updated : l; });

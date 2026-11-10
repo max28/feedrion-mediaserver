@@ -29,6 +29,10 @@ namespace Feedrion.MediaServer.Core
         [JsonPropertyName("season")] public int? Season { get; set; }
         [JsonPropertyName("episode")] public int? Episode { get; set; }
         [JsonPropertyName("tvdbSeriesId")] public int TvdbSeriesId { get; set; }
+
+        /// <summary>A film rather than an episode: <see cref="Series"/> is its
+        /// title, and there is no season or episode.</summary>
+        [JsonPropertyName("movie")] public bool Movie { get; set; }
     }
 
     /// <summary>The last <see cref="Keep"/> changes, newest last, in one JSON

@@ -22,6 +22,7 @@ namespace Feedrion.MediaServer.Core
         [JsonPropertyName("pairingExpiresAt")] public DateTimeOffset? PairingExpiresAt { get; set; }
         [JsonPropertyName("pairingError")] public string? PairingError { get; set; }
         [JsonPropertyName("addNewShows")] public bool AddNewShows { get; set; }
+        [JsonPropertyName("addNewMovies")] public bool AddNewMovies { get; set; }
         [JsonPropertyName("libraryIds")] public List<string>? LibraryIds { get; set; }
         [JsonPropertyName("neverUnwatch")] public bool NeverUnwatch { get; set; } = true;
 
@@ -41,6 +42,7 @@ namespace Feedrion.MediaServer.Core
             PairingExpiresAt = pending?.ExpiresAt,
             PairingError = pending?.Error,
             AddNewShows = link?.AddNewShows ?? false,
+            AddNewMovies = link?.AddNewMovies ?? false,
             LibraryIds = link?.LibraryIds,
             NeverUnwatch = link?.NeverUnwatch ?? true,
         };

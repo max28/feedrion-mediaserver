@@ -123,6 +123,23 @@ namespace Feedrion.MediaServer.Core
                 + (string.IsNullOrEmpty(cursor) ? "" : "&cursor=" + Uri.EscapeDataString(cursor)),
                 null, true, ct);
 
+        // ── Films ─────────────────────────────────────────────────────────────
+
+        /// <summary>[addNewMovies] false: Feedrion applies these watches only
+        /// to films the account already follows.</summary>
+        public Task<EventsResult> PostMovieEventsAsync(System.Collections.Generic.IList<MovieWatchEvent> events, bool addNewMovies, CancellationToken ct) =>
+            SendAsync<EventsResult>(HttpMethod.Post, "/integrations/v1/mediaserver/movies/events",
+                new { events, add_new_movies = addNewMovies }, true, ct);
+
+        public Task<LibraryResult> PostMovieLibraryAsync(MovieLibraryBatch batch, CancellationToken ct) =>
+            SendAsync<LibraryResult>(HttpMethod.Post, "/integrations/v1/mediaserver/movies/library", batch, true, ct);
+
+        public Task<MovieWatchesPage> GetMovieWatchedAsync(string? cursor, int limit, CancellationToken ct) =>
+            SendAsync<MovieWatchesPage>(HttpMethod.Get,
+                "/integrations/v1/mediaserver/movies/watched?limit=" + limit
+                + (string.IsNullOrEmpty(cursor) ? "" : "&cursor=" + Uri.EscapeDataString(cursor)),
+                null, true, ct);
+
         public async Task DisconnectAsync(CancellationToken ct)
         {
             await SendAsync<object>(HttpMethod.Post, "/integrations/v1/disconnect", null, true, ct).ConfigureAwait(false);

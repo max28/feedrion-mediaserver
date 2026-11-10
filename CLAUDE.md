@@ -29,14 +29,25 @@ message and comment as if it already were.
 ## Rules that must not drift
 - **Premium as a whole.** A 402 or `premium: false` sends nothing and DROPS
   nothing: events stay queued until the account is Premium again.
-- **Only TheTVDB ids leave the server.** No title, file name, path or server
-  user name in any payload. An episode without a TheTVDB id is ignored.
+- **Only ids leave the server** — TheTVDB, plus IMDb / TMDB for a film. No
+  title, file name, path or server user name in any payload. An episode
+  without a TheTVDB id, or a film with none of the three, is ignored.
 - **Per-link options belong to the server admin** (`LinkState.AddNewShows`,
   off by default, sent as `add_new_shows` with every events batch;
   `LinkState.LibraryIds`, null = every library). A choice of libraries filters
   everything: history import, live events, inventory, and the reverse
   `MarkPlayed`. With a choice made, an episode whose library is unknown is
   left out. A change resets `ImportDone` and `LibraryFullAt`.
+- **Films follow the episodes' rules, on their own queue** (`SyncEngine.Movies.cs`,
+  `IMovieAdapter` — a separate interface so an adapter without films still
+  compiles). A film carries whichever of TheTVDB / IMDb / TMDB ids it has (at
+  least one; `MovieIds.Key` files it under one, `AllKeys` answers echoes under
+  any). `LinkState.AddNewMovies` (off by default, `add_new_movies` with every
+  batch) mirrors `AddNewShows`; libraries, threshold, Premium, echo
+  suppression and `NeverUnwatch` apply unchanged. A 404 on
+  `/mediaserver/movies/*` (an API from before films) parks films for
+  `MoviesRetryAfter` (24 h) and never touches the episodes' pass. The
+  ignored-series list does not apply to films.
 - **Ignored series are server-wide** (`PluginConfiguration.IgnoredTvdbSeriesIds`,
   read through `SyncEngine.IgnoredSeries`): filtered at every exit — live
   events, history import, flush of what was queued before, inventory and

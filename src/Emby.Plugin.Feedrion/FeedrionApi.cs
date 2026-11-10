@@ -42,6 +42,7 @@ namespace Emby.Plugin.Feedrion
     {
         public string UserId { get; set; } = "";
         public bool AddNewShows { get; set; }
+        public bool AddNewMovies { get; set; }
         public bool AllLibraries { get; set; } = true;
         public bool NeverUnwatch { get; set; } = true;
         public string LibraryIds { get; set; } = "";
@@ -142,6 +143,7 @@ namespace Emby.Plugin.Feedrion
             var state = Entry.Engine.UpdateSettings(key, user.Name, new LinkSettings
             {
                 AddNewShows = request.AddNewShows,
+                AddNewMovies = request.AddNewMovies,
                 NeverUnwatch = request.NeverUnwatch,
                 LibraryIds = request.AllLibraries
                     ? null

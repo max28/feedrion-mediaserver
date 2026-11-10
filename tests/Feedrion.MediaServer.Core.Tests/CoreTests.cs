@@ -446,5 +446,102 @@ namespace Feedrion.MediaServer.Core.Tests
             Assert.DoesNotContain(sent, e => e.Type == WatchEvent.Unwatched);
             Assert.Contains(sent, e => e.TvdbEpisodeId == 1403);
         }
+
+        // ── Films ─────────────────────────────────────────────────────────────
+
+        private static MovieRef Film(string imdb, string? library = null) => new MovieRef
+        {
+            ImdbId = imdb, Name = "Film " + imdb, LibraryIds = library == null ? null : new[] { library },
+        };
+
+        [Fact]
+        public async Task A_film_played_past_the_threshold_is_sent_by_whatever_id_it_has()
+        {
+            var (engine, store) = Engine();
+            engine.RecordMoviePlayback(UserId, Film("tt0001"), 40, playedToCompletion: false);
+            Assert.Empty(store.Get(UserId)!.PendingMovieEvents);
+            engine.RecordMoviePlayback(UserId, Film("tt0002"), 95, playedToCompletion: false);
+            engine.RecordMoviePlayback(UserId, new MovieRef { Name = "No ids" }, 100, playedToCompletion: true);
+            await engine.RunOnceAsync(CancellationToken.None);
+            var sent = _api.MovieEventBatches.Single().Single();
+            Assert.Equal("tt0002", sent.ImdbId);
+            Assert.Null(sent.TvdbId);
+            Assert.Equal(95, sent.Percent);
+            // Off by default, like the shows.
+            Assert.Equal(new bool?[] { false }, _api.MovieBatchAddNewMovies.ToArray());
+            Assert.Empty(store.Get(UserId)!.PendingMovieEvents);
+        }
+
+        [Fact]
+        public async Task Adding_new_films_follows_its_own_setting()
+        {
+            var (engine, store) = Engine();
+            engine.UpdateSettings(UserId, "max", new LinkSettings { AddNewMovies = true });
+            Assert.True(store.Get(UserId)!.AddNewMovies);
+            Assert.False(store.Get(UserId)!.AddNewShows);
+            Assert.True(LinkView.From(UserId, "max", store.Get(UserId), null).AddNewMovies);
+            engine.RecordMoviePlayedToggle(UserId, Film("tt0003"), played: true);
+            await engine.RunOnceAsync(CancellationToken.None);
+            Assert.Equal(true, _api.MovieBatchAddNewMovies.Last());
+        }
+
+        [Fact]
+        public async Task The_film_history_is_imported_once_and_the_library_sent_by_generation()
+        {
+            var (engine, store) = Engine();
+            _adapter.MovieHistory.Add(new MovieWatchEvent { TmdbId = "550", Type = WatchEvent.Watched });
+            _adapter.MovieLibrary.Add(new MovieLibraryItem { ItemId = "f1", TmdbId = "550" });
+            await engine.RunOnceAsync(CancellationToken.None);
+            Assert.Equal("550", _api.MovieEventBatches.Single().Single().TmdbId);
+            var library = _api.MovieLibraryBatches.Single();
+            Assert.True(library.Final);
+            Assert.Equal("f1", library.Items.Single().ItemId);
+            Assert.True(store.Get(UserId)!.MovieImportDone);
+            await engine.RunOnceAsync(CancellationToken.None);
+            Assert.Single(_api.MovieEventBatches);
+        }
+
+        [Fact]
+        public async Task A_film_watched_elsewhere_is_marked_here_and_its_echo_not_sent_back()
+        {
+            var (engine, store) = Engine();
+            _adapter.MovieLibrary.Add(new MovieLibraryItem { ItemId = "f2", ImdbId = "tt0004", Name = "Orbit Nine" });
+            _api.MovieWatches.Add(new RemoteMovieWatch { TvdbId = 77, ImdbId = "tt0004", WatchedAt = DateTimeOffset.UtcNow });
+            await engine.RunOnceAsync(CancellationToken.None);
+            Assert.Single(_adapter.MoviesMarked);
+            Assert.Equal("movies|1", store.Get(UserId)!.MovieWatchCursor);
+            engine.RecordMoviePlayedToggle(UserId, Film("tt0004"), played: true);
+            Assert.Empty(store.Get(UserId)!.PendingMovieEvents);
+        }
+
+        [Fact]
+        public async Task An_api_without_films_keeps_them_waiting_and_the_episodes_flowing()
+        {
+            var (engine, store) = Engine();
+            _api.MoviesSupported = false;
+            engine.RecordMoviePlayedToggle(UserId, Film("tt0005"), played: true);
+            engine.RecordPlayedToggle(UserId, Ep(901), played: true);
+            await engine.RunOnceAsync(CancellationToken.None);
+            var state = store.Get(UserId)!;
+            Assert.Null(state.LastError);
+            Assert.Single(_api.EventBatches);
+            Assert.Single(state.PendingMovieEvents);
+            Assert.NotNull(state.MoviesUnsupportedAt);
+            // Not tried again within the day.
+            var calls = _api.Calls.Count(c => c.Path.Contains("/movies/"));
+            await engine.RunOnceAsync(CancellationToken.None);
+            Assert.Equal(calls, _api.Calls.Count(c => c.Path.Contains("/movies/")));
+        }
+
+        [Fact]
+        public async Task A_film_outside_the_linked_libraries_is_never_sent()
+        {
+            var (engine, store) = Engine();
+            engine.UpdateSettings(UserId, "max", new LinkSettings { LibraryIds = new System.Collections.Generic.List<string> { "lib-films" } });
+            engine.RecordMoviePlayedToggle(UserId, Film("tt0006", "lib-kids"), played: true);
+            engine.RecordMoviePlayedToggle(UserId, Film("tt0007", "lib-films"), played: true);
+            Assert.Equal(new[] { "tt0007" }, store.Get(UserId)!.PendingMovieEvents.Select(e => e.ImdbId).ToArray());
+            await Task.CompletedTask;
+        }
     }
 }

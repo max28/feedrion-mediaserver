@@ -14,6 +14,10 @@ extension of [Feedrion](https://feedrion.com).
   server holds, with an optional link that opens the episode here.
 - **The other way round** — what you watched elsewhere (in the Feedrion app,
   Trakt, Simkl, another server…) is marked played on the server.
+- **Films too** — the same for Feedrion's « Films » extension: a film played
+  past the threshold (or marked played) is marked watched, the films already
+  played are imported once, Feedrion shows which of your films this server
+  holds, and a film watched elsewhere is marked played here.
 - **Multi-user** — every server user links their own Feedrion account.
 - **You decide what reaches Feedrion** — per user: whether series it does not
   follow yet get added (off by default), whether an "unplayed" mark is sent,
@@ -28,11 +32,13 @@ events queued on the server and sends nothing until it is.
 
 ## Privacy
 
-Only [TheTVDB](https://thetvdb.com) ids leave your server (series and episode
-ids, how far a playback went, when), plus the server's name, version and — if
+Only [TheTVDB](https://thetvdb.com) ids leave your server (series, episode and
+film ids — for a film, its IMDb or TMDB id too, since servers often match films
+on those — how far a playback went, when), plus the server's name, version and — if
 you set it — its public address. **Never** a title, a file name, a path, an IP
 or a server user name. Feedrion never connects to your server: the plugin
-always calls out, over https. Episodes without a TheTVDB id are ignored.
+always calls out, over https. Episodes without a TheTVDB id, and films with
+none of the three ids, are ignored.
 
 ## Requirements
 
@@ -97,6 +103,8 @@ linking), then:
   "My shows"; the others are left out (the history import too). Keep it off
   on a profile the family shares. To bring in a series anyway, follow it in the
   app first.
+- **Add to Feedrion the films this user watches that it does not follow yet**
+  — off by default, the same rule for « Films » (a Premium extension).
 - **Never mark an episode unwatched in Feedrion** — on by default. On, an
   episode marked unplayed on this server stays watched in Feedrion; untick it
   for a server marking "unplayed" should undo in Feedrion too.

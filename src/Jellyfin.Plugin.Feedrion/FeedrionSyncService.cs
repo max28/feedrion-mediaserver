@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Feedrion.MediaServer.Core;
+using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Session;
@@ -30,6 +31,8 @@ namespace Jellyfin.Plugin.Feedrion
         private readonly ILogger<FeedrionSyncService> _logger;
         private readonly ConcurrentDictionary<int, LibraryItem> _added = new ConcurrentDictionary<int, LibraryItem>();
         private readonly ConcurrentDictionary<int, byte> _removed = new ConcurrentDictionary<int, byte>();
+        private readonly ConcurrentDictionary<string, MovieLibraryItem> _addedMovies = new ConcurrentDictionary<string, MovieLibraryItem>();
+        private readonly ConcurrentDictionary<string, byte> _removedMovies = new ConcurrentDictionary<string, byte>();
 
         public FeedrionSyncService(
             SyncEngine engine, JellyfinAdapter adapter, ISessionManager sessions, IUserDataManager userData,
@@ -94,6 +97,15 @@ namespace Jellyfin.Plugin.Feedrion
         {
             try
             {
+                if (e.Item is Movie movie)
+                {
+                    var film = _adapter.MovieReference(movie);
+                    if (film == null) return;
+                    var played = Scrobble.PlayedPercent(e.PlaybackPositionTicks, movie.RunTimeTicks);
+                    foreach (var user in e.Users)
+                        _engine.RecordMoviePlayback(JellyfinAdapter.UserKey(user.Id), film, played, e.PlayedToCompletion);
+                    return;
+                }
                 if (e.Item is not Episode episode) return;
                 var reference = _adapter.Reference(episode);
                 if (reference == null) return;
@@ -113,9 +125,29 @@ namespace Jellyfin.Plugin.Feedrion
             // own « played » at the end of a playback: a stop event can carry
             // no position, or one already reset to 0, and the episode then
             // never reached Feedrion although the server shows it watched.
-            if (e.Item is not Episode episode) return;
             var finished = e.SaveReason == UserDataSaveReason.PlaybackFinished;
             if (e.SaveReason != UserDataSaveReason.TogglePlayed && !finished) return;
+            if (e.Item is Movie movie)
+            {
+                try
+                {
+                    var film = _adapter.MovieReference(movie);
+                    if (film == null || e.UserData == null) return;
+                    var key = JellyfinAdapter.UserKey(e.UserId);
+                    if (finished)
+                    {
+                        if (e.UserData.Played) _engine.RecordMoviePlayedByServer(key, film);
+                        return;
+                    }
+                    _engine.RecordMoviePlayedToggle(key, film, e.UserData.Played);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Feedrion: could not record a played mark");
+                }
+                return;
+            }
+            if (e.Item is not Episode episode) return;
             try
             {
                 var reference = _adapter.Reference(episode);
@@ -136,6 +168,21 @@ namespace Jellyfin.Plugin.Feedrion
 
         private void OnItemAdded(object? sender, ItemChangeEventArgs e)
         {
+            if (e.Item is Movie)
+            {
+                try
+                {
+                    var film = _adapter.MovieItem(e.Item);
+                    if (film == null) return;
+                    _removedMovies.TryRemove(film.ItemId, out _);
+                    _addedMovies[film.ItemId] = film;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Feedrion: could not read an added film");
+                }
+                return;
+            }
             LibraryItem? item;
             try
             {
@@ -153,6 +200,13 @@ namespace Jellyfin.Plugin.Feedrion
 
         private void OnItemRemoved(object? sender, ItemChangeEventArgs e)
         {
+            if (e.Item is Movie)
+            {
+                var itemId = e.Item.Id.ToString("N", System.Globalization.CultureInfo.InvariantCulture);
+                _addedMovies.TryRemove(itemId, out _);
+                _removedMovies[itemId] = 0;
+                return;
+            }
             var reference = JellyfinAdapter.ToRef(e.Item);
             if (reference?.TvdbEpisodeId == null) return;
             _added.TryRemove(reference.TvdbEpisodeId.Value, out _);
@@ -168,6 +222,13 @@ namespace Jellyfin.Plugin.Feedrion
             foreach (var key in _removed.Keys)
                 if (_removed.TryRemove(key, out _)) removed.Add(key);
             _engine.RecordLibraryChange(added, removed);
+            var addedMovies = new List<MovieLibraryItem>();
+            foreach (var key in _addedMovies.Keys)
+                if (_addedMovies.TryRemove(key, out var film)) addedMovies.Add(film);
+            var removedMovies = new List<string>();
+            foreach (var key in _removedMovies.Keys)
+                if (_removedMovies.TryRemove(key, out _)) removedMovies.Add(key);
+            _engine.RecordMovieLibraryChange(addedMovies, removedMovies);
         }
     }
 }
